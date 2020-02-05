@@ -10,16 +10,17 @@ using namespace std;
 using namespace std::chrono;
 using namespace std::this_thread;
 
-int main()
+void test_capture()
 {
     VideoCapture v(0);
     if (!v.isOpened()) {
         cerr << "Cannot open camera" << endl;
-        return -1;
+        exit(-1);
     }
 
-    v.set(CAP_PROP_FRAME_WIDTH, 640);
-    v.set(CAP_PROP_FRAME_HEIGHT, 480);
+    v.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G') );
+    v.set(CAP_PROP_FRAME_WIDTH, 1296);
+    v.set(CAP_PROP_FRAME_HEIGHT, 972);
 
     Mat frame;
     steady_clock::time_point start = steady_clock::now();
@@ -28,12 +29,12 @@ int main()
     double avg_fps = 0;
 
     while (true) {
+        end = steady_clock::now();
+
         if (!v.read(frame)) {
             cerr << "Cannot read frame" << endl;
-            return -1;
+            exit(-1);
         }
-
-        end = steady_clock::now();
 
         interval = duration_cast<nanoseconds>(end - start);
         double fps = 1e9 / interval.count();
@@ -61,6 +62,62 @@ int main()
     }
 
     v.release();
+}
 
-    return 0;
+void test_write()
+{
+    // Prepare VideoCapture
+    VideoCapture v = VideoCapture(0);
+
+    v.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G') );
+    v.set(CAP_PROP_FRAME_WIDTH, 1296);
+    v.set(CAP_PROP_FRAME_HEIGHT, 972);
+
+    if (!v.isOpened()) {
+        cerr << "Cannot open camera" << endl;
+        exit(-1);
+    }
+
+    Mat im;
+    if (!v.read(im)) {
+        cerr << "Cannot read frame" << endl;
+        exit(-1);
+    }
+
+    bool isColor = im.type() == CV_8UC3;
+
+    // Prepare VideoWriter
+    string filename = "/home/yang/demo.avi";
+    int codec = VideoWriter::fourcc('M', 'J', 'P', 'G');
+    double fps = 30;
+
+    VideoWriter w = VideoWriter();
+    w.open(filename, codec, fps, im.size(), isColor);
+    if (!w.isOpened()) {
+        cerr << "Cannot open output video file" << endl;
+        exit(-1);
+    }
+
+    // Get all frames
+    const int nFrames = 300;
+    vector<steady_clock::time_point> timestamps(nFrames);
+    for (int i = 0; i < nFrames; i++) {
+        timestamps.emplace_back();
+    }
+
+    for (int i = 0; i < nFrames; i++) {
+        timestamps[i] = steady_clock::now();
+        if (!v.read(im)) {
+            cerr << "Cannot read frame to write" << endl;
+            exit(-1);
+        }
+
+        w.write(im);
+    }
+
+}
+
+int main()
+{
+    test_write();
 }

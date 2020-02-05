@@ -45,7 +45,7 @@ vector<double> solveXY(double u_px, double v_px)
 
 int main()
 {
-    VideoCapture v = VideoCapture("/home/yang/Videos/ball-5.mp4");
+    VideoCapture v = VideoCapture("/home/yang/Videos/ball-9-ground.mp4");
 
     if (!v.isOpened()) {
         cerr << "Cannot open capture" << endl;
@@ -76,7 +76,7 @@ int main()
 
                 double area = m.m00;
 
-                if (area > 100) {
+                if (area > 20) {
                     auto rotatedRect = fitEllipse(contour);
                     Point2f vertices[4];
                     rotatedRect.points(vertices);
@@ -98,7 +98,7 @@ int main()
                     double yc = yc1 * distance / distance1;
                     double zc = sqrt(distance * distance - xc * xc - yc * yc);
 
-                    printf("(%f, %f, %f)\n", xc, yc, zc);
+                    printf("(%f, %f, %f),\n", xc, yc, zc);
 
                     circle(im, Point(xi, yi), ri, Scalar(255, 0, 0), 1);
                 }
@@ -120,7 +120,7 @@ int main()
             }
         }
 
-        //        sleep_for(milliseconds(50));
+        sleep_for(milliseconds(50));
     }
 
     v.release();
