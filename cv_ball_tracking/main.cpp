@@ -12,7 +12,7 @@ using namespace std::this_thread;
 double calcDistance(double diameter_px)
 {
     const double focal_len = 3.6e-3; // focal length 3.6mm
-    const double pix_size = 1.4e-6 * 2; // pixel size 1.4um, binning 2x2
+    const double pix_size = 1.4e-6 * (2592.0 / 640.0); // pixel size 1.4um, plus binning+skip
     const double tennis_size = 6.6e-2; // tennis ball size 6.6cm
     double d_m = tennis_size * focal_len / (diameter_px * pix_size);
 
@@ -22,7 +22,7 @@ double calcDistance(double diameter_px)
 vector<double> solveXY(double u_px, double v_px)
 {
     const double focal_len = 3.6e-3; // focal length 3.6mm
-    const double pix_size = 1.4e-6 * 2; // pixel size 1.4um, binning 2x2
+    const double pix_size = 1.4e-6 * (2592.0 / 640.0); // pixel size 1.4um, plus binning+skip
 
     double intrinsic[3][3] = {
         {focal_len, 0, 0.5 * 640 * pix_size},
@@ -88,10 +88,14 @@ int main()
                     double ri = sqrt(area / CV_PI);
 
                     auto objectCameraHomo = solveXY(xi, yi);
-                    double xc = objectCameraHomo[0];
-                    double yc = objectCameraHomo[1];
+                    double xc1 = objectCameraHomo[0];
+                    double yc1 = objectCameraHomo[1];
 
+                    double distance1 = sqrt(xc1 * xc1 + yc1 * yc1 + 1);
                     double distance = calcDistance(ri * 2);
+
+                    double xc = xc1 * distance / distance1;
+                    double yc = yc1 * distance / distance1;
                     double zc = sqrt(distance * distance - xc * xc - yc * yc);
 
                     printf("(%f, %f, %f)\n", xc, yc, zc);
