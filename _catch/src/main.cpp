@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include <optional>
 
 #include "internal.h"
 
@@ -34,11 +35,12 @@ Vec3d cameraTransform(const Vec3d& ball_position_radius_px)
     return {0, 0, 0};
 }
 
-void calculateDestination() {
+void calculateDestination()
+{
     // TODO
 }
 
-pair<Vec3d, steady_clock::time_point> getBallInImage(VideoCapture v)
+optional<pair<Vec3d, steady_clock::time_point>> getBallInImage(VideoCapture v)
 {
     /* Get ball position, radius, and timestamp in Image frame
      * Parameters:
@@ -58,11 +60,21 @@ pair<Vec3d, steady_clock::time_point> getBallInImage(VideoCapture v)
     Mat im_grey;
     cvtColor(im, im_grey, COLOR_BGR2GRAY);
 
-    threshold(im_grey, im_grey, 127, 255, THRESH_BINARY_INV);
+    threshold(im_grey, im_grey, 90, 255, THRESH_BINARY_INV);
+
+#if 0
+    imshow("im", im);
+    imshow("im_grey", im_grey);
+    waitKey(-1);
+    destroyAllWindows();
+#endif
 
     vector<vector<Point2i>> contours;
     vector<Vec4i> hierarchy;
     findContours(im_grey, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+    im.release();
+    im_grey.release();
 
     if (!contours.empty()) {
         sortContours(contours);
@@ -79,19 +91,20 @@ pair<Vec3d, steady_clock::time_point> getBallInImage(VideoCapture v)
             yi = m.m01 / area;
             ri = sqrt(area / CV_PI);
 
-            return {{xi, yi, ri}, timestamp};
+            return pair<Vec3d, steady_clock::time_point>({xi, yi, ri}, timestamp);
         } else {
-            return {NULL, timestamp};
+            return {};
         }
     }
 
-    return {NULL, timestamp};
+    return {};
 }
 
 int main(int argc, char* argv[])
 {
     const string keys =
         "{h help ?       |    | Print this message}"
+        "{v video        |    | Use a video file instead of camera}"
         "{n n-frames     | 10 | Maximum number of frames used to calculate the trajectory of the ball}"
         "{r resolution   | s  | Camera resolution. Valid values are s: 640x480; m: 1296x972; l: 2592x1944}"
         "{a altitude     | -1 | Altitude used by the drone to catch the ball. Default -1 will remain at current altitude}"
@@ -101,12 +114,13 @@ int main(int argc, char* argv[])
     CommandLineParser parser(argc, argv, keys);
     parser.about("The main program that will catch the ball");
 
-    if (argc == 1) {
+    if (parser.has("help")) {
         parser.printMessage();
         return 0;
     }
 
     // Parse and check arguments
+    auto video_path = parser.get<string>("video");
     auto n_frames = parser.get<int>("n-frames");
     auto altitude = parser.get<int>("altitude");
     auto takeoff_alt = parser.get<float>("takeoff-alt");
@@ -117,12 +131,6 @@ int main(int argc, char* argv[])
         parser.printErrors();
         exit(-1);
     }
-
-    cout << "Get command line arg `n-frames`: " << n_frames << endl;
-    cout << "Get command line arg `altitude`: " << altitude << endl;
-    cout << "Get command line arg `takeoff-alt`: " << takeoff_alt << endl;
-    cout << "Get command line arg `resolution`: " << res_char << endl;
-    cout << "Get command line arg `connection`: " << connection << endl;
 
     if (n_frames < 8) {
         cerr << CLI_COLOR_RED << "Invalid n-frames `" << n_frames << "`. Must be at least 8"
@@ -151,10 +159,20 @@ int main(int argc, char* argv[])
     }
 
     // Prepare VideoCapture
-    VideoCapture v(0, CAP_V4L2);
+    VideoCapture v;
+    if (parser.has("video")) {
+        cout << "Using video file " << video_path << endl;
+        v = VideoCapture(video_path);
 
-    v.set(CAP_PROP_FRAME_WIDTH, resolution[0]);
-    v.set(CAP_PROP_FRAME_HEIGHT, resolution[1]);
+        if (parser.has("resolution")) {
+            cout << "Ignoring resolution setting" << endl;
+        }
+    } else {
+        cout << "Using camera with resolution " << res_char << ": " << resolution << endl;
+        v = VideoCapture(0, CAP_V4L2);
+        v.set(CAP_PROP_FRAME_WIDTH, resolution[0]);
+        v.set(CAP_PROP_FRAME_HEIGHT, resolution[1]);
+    }
 
     if (!v.isOpened()) {
         cerr << CLI_COLOR_RED << "Cannot open video capture" << CLI_COLOR_NORMAL << endl;
@@ -170,6 +188,7 @@ int main(int argc, char* argv[])
 
     getBallInImage(v);
 
+#ifdef USE_DRONE_CONTROL
     // Prepare Drone
     Mavsdk mav;
     auto connection_result = mav.add_any_connection(connection);
@@ -182,8 +201,11 @@ int main(int argc, char* argv[])
         sleep_for(seconds(1));
     }
 
-    // Make system objects
     System& system = mav.system();
+    cout << CLI_COLOR_GREEN << "System connected: " << system.get_uuid() << CLI_COLOR_NORMAL
+         << endl;
+
+    // Make system objects
     auto action = make_shared<Action>(system);
     auto offboard = make_shared<Offboard>(system);
     auto telemetry = make_shared<Telemetry>(system);
@@ -201,15 +223,47 @@ int main(int argc, char* argv[])
     cout << "Armed" << endl;
 
     // System Takeoff!!!
+    cout << "Using takeoff altitude: " << takeoff_alt << "m" << endl;
     action->set_takeoff_altitude(takeoff_alt);
     Action::Result takeoff_result = action->takeoff();
     check_action_result(takeoff_result, "Takeoff failed: ");
     sleep_for(seconds(5));
+#endif // USE_DRONE_CONTROL
 
     // TODO: Catch a ball!
 
+    while (true) {
+        auto result = getBallInImage(v);
+
+        if (result.has_value()) {
+            cout << "\nFound ball in image" << endl;
+            break;
+        } else {
+            cout << CLI_COLOR_YELLOW << "\rWaiting for ball to appear in image" << CLI_COLOR_NORMAL;
+        }
+    }
+
+    cout << "Tracking ball position within " << n_frames << " frames" << endl;
+    vector<Vec3d> positions(n_frames);
+    vector<steady_clock::time_point> timestamps(n_frames);
+    for (int i = 0; i < n_frames; ++i) {
+        auto result = getBallInImage(v);
+
+        if (result.has_value()) {
+            auto value = result.value();
+            positions[i] = value.first;
+            timestamps[i] = value.second;
+        }
+    }
+
+    cout << "Positions acquired in " << positions.size() << " frames" << endl;
+    cout << "Total interval: "
+         << duration_cast<milliseconds>(timestamps[timestamps.size() - 1] - timestamps[0]).count()
+         << "ms" << endl;
+
     v.release();
 
+#ifdef USE_DRONE_CONTROL
     // Return the vehicle
     action->set_return_to_launch_return_altitude(10.0f);
     const Action::Result rtl_result = action->return_to_launch();
@@ -226,6 +280,7 @@ int main(int argc, char* argv[])
     // We are relying on auto-disarming but let's keep watching the telemetry for a bit longer.
     sleep_for(seconds(2));
     cout << "Finished." << endl;
+#endif // USE_DRONE_CONTROL
 
     return 0;
 }
