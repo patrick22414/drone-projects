@@ -18,35 +18,92 @@ using namespace std;
 using namespace this_thread;
 using namespace chrono;
 
-void fitParabola(const vector<Vec4d>& points)
+Vec6d calculateParabola(const vector<Vec3d>& points, const vector<nanoseconds>& timestamps)
 {
-    // TODO: find the parameters of a parabola from a series of points in World frame
+    // Find the parameters of a parabola from a series of points in World frame
+    assert(points.size() == timestamps.size());
+
+    int n = points.size();
+
+    Mat A(n * 3, 6, CV_64F);
+    Mat b(n * 3, 1, CV_64F);
+    Mat x(n * 3, 1, CV_64F);
+
+    solve(A, b, x, DECOMP_SVD);
+
+    Vec6d parabola((double*)x.data);
+
+    return parabola;
 }
 
-void worldTransform(const Vec3d& p, Telemetry::PositionNED t, Telemetry::EulerAngle r)
+Vec3d worldTransform(
+    const Vec3d& p, const Telemetry::PositionNED& t, const Telemetry::EulerAngle& r)
 {
     // TODO: given a point in the Camera frame, transform the position into the World frame
 }
 
-Vec3d cameraTransform(const Vec3d& ball_position_radius_px)
+Vec3d cameraTransform(const Vec2d& ball_position_px, double r_px, const Vec2d& resolution)
 {
-    // TODO: given a point in the Image frame in pixels, and the distance from the camera to the
-    // ball, find the position of the ball in the Camera frame
-    return {0, 0, 0};
+    const double tennis_size = 6.6e-2; // tennis ball size 6.6cm
+
+    // Pi Camera V1 parameters
+    const double sensor_w_px = 2592; // sensor width in pixels
+    const double sensor_h_px = 1944; // sensor height in pixels
+    const double focal_length = 3.6e-3; // focal length 3.6mm
+    const double real_pixel_size = 1.4e-6; // real pixel size 1.4um
+
+    double u_px = ball_position_px[0];
+    double v_px = ball_position_px[1];
+
+    double res_w = resolution[0];
+    double res_h = resolution[1];
+
+    double pix_size = real_pixel_size * (sensor_w_px / res_w); // relative pixel size with binning
+
+    // camera intrinsic matrix (partial)
+    double intrinsics[3][3] = {
+        {focal_length, 0, 0.5 * res_w * pix_size},
+        {0, focal_length, 0.5 * res_h * pix_size},
+        {0, 0, 1},
+    };
+
+    // object homogeneous coordinates (Image frame) (z = 1)
+    double object_i_homo[3] = {u_px * pix_size, v_px * pix_size, 1};
+
+    Mat A(3, 3, CV_64F, intrinsics);
+    Mat b(3, 1, CV_64F, object_i_homo);
+    Mat x(3, 1, CV_64F);
+    solve(A, b, x, DECOMP_SVD);
+
+    // ray direction (xc1, yc1 , 1)
+    double xc1 = x.at<double>(0);
+    double yc1 = x.at<double>(1);
+
+    // distance from camera to ball
+    double distance = tennis_size * focal_length / (r_px * pix_size);
+    double distance1 = sqrt(xc1 * xc1 + yc1 * yc1 + 1);
+
+    // object coordinates (Camera frame)
+    double xc = xc1 * distance / distance1;
+    double yc = yc1 * distance / distance1;
+    double zc = sqrt(distance * distance - xc * xc - yc * yc);
+
+    return {xc, yc, zc};
 }
 
-void calculateDestination()
+Offboard::PositionNEDYaw calculateDestination(const Vec6d& parabola, double catch_alt)
 {
     // TODO
 }
 
-optional<pair<Vec3d, steady_clock::time_point>> getBallInImage(VideoCapture v)
+optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCapture& v)
 {
     /* Get ball position, radius, and timestamp in Image frame
      * Parameters:
      *     v : VideoCapture
      * Returns:
-     *     Vec3d     : {xi_px, yi_px, r_px}
+     *     Vec2d     : {xi_px, yi_px}
+     *     double    : ri_px
      *     timestamp : steady_clock right before the image was captured
      */
     Mat im;
@@ -91,7 +148,7 @@ optional<pair<Vec3d, steady_clock::time_point>> getBallInImage(VideoCapture v)
             yi = m.m01 / area;
             ri = sqrt(area / CV_PI);
 
-            return pair<Vec3d, steady_clock::time_point>({xi, yi, ri}, timestamp);
+            return tuple<Vec2d, double, steady_clock::time_point>({xi, yi}, ri, timestamp);
         } else {
             return {};
         }
@@ -145,7 +202,7 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    Vec2i resolution;
+    Vec2d resolution;
     if (res_char == 's')
         resolution = {640, 480};
     else if (res_char == 'm')
@@ -186,7 +243,7 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    getBallInImage(v);
+    test_image.release();
 
 #ifdef USE_DRONE_CONTROL
     // Prepare Drone
@@ -206,11 +263,11 @@ int main(int argc, char* argv[])
          << endl;
 
     // Make system objects
-    auto action = make_shared<Action>(system);
-    auto offboard = make_shared<Offboard>(system);
-    auto telemetry = make_shared<Telemetry>(system);
+    auto action = Action(system);
+    auto offboard = Offboard(system);
+    auto telemetry = Telemetry(system);
 
-    while (!telemetry->health_all_ok()) {
+    while (!telemetry.health_all_ok()) {
         cout << CLI_COLOR_YELLOW << "Waiting for system to be ready" << CLI_COLOR_NORMAL << endl;
         sleep_for(seconds(1));
     }
@@ -218,19 +275,21 @@ int main(int argc, char* argv[])
     cout << CLI_COLOR_GREEN << "System is ready" << CLI_COLOR_NORMAL << endl;
 
     // Arm system
-    Action::Result arm_result = action->arm();
+    Action::Result arm_result = action.arm();
     check_action_result(arm_result, "Arm failed: ");
     cout << "Armed" << endl;
 
     // System Takeoff!!!
     cout << "Using takeoff altitude: " << takeoff_alt << "m" << endl;
-    action->set_takeoff_altitude(takeoff_alt);
-    Action::Result takeoff_result = action->takeoff();
+    action.set_takeoff_altitude(takeoff_alt);
+    Action::Result takeoff_result = action.takeoff();
     check_action_result(takeoff_result, "Takeoff failed: ");
     sleep_for(seconds(5));
 #endif // USE_DRONE_CONTROL
 
     // TODO: Catch a ball!
+
+    steady_clock::time_point t0 = steady_clock::now();
 
     while (true) {
         auto result = getBallInImage(v);
@@ -243,34 +302,57 @@ int main(int argc, char* argv[])
         }
     }
 
+    // Get everything we need to calculate the parabola
     cout << "Tracking ball position within " << n_frames << " frames" << endl;
-    vector<Vec3d> positions(n_frames);
-    vector<steady_clock::time_point> timestamps(n_frames);
+    vector<Vec2d> positions_i;
+    vector<double> radii_i;
+    vector<nanoseconds> timestamps;
+    vector<Telemetry::PositionNED> drone_positions;
+    vector<Telemetry::EulerAngle> drone_rotations;
     for (int i = 0; i < n_frames; ++i) {
         auto result = getBallInImage(v);
 
         if (result.has_value()) {
-            auto value = result.value();
-            positions[i] = value.first;
-            timestamps[i] = value.second;
+#ifdef USE_DRONE_CONTROL
+            drone_positions.push_back(telemetry.position_velocity_ned().position);
+            drone_rotations.push_back(telemetry.attitude_euler_angle());
+#endif // USE_DRONE_CONTROL
+            auto values = result.value();
+            positions_i.push_back(get<0>(values));
+            radii_i.push_back(get<1>(values));
+            timestamps.push_back(duration_cast<nanoseconds>(get<2>(values) - t0));
         }
     }
 
-    cout << "Positions acquired in " << positions.size() << " frames" << endl;
+    cout << "Positions acquired in " << positions_i.size() << " frames" << endl;
     cout << "Total interval: "
          << duration_cast<milliseconds>(timestamps[timestamps.size() - 1] - timestamps[0]).count()
          << "ms" << endl;
 
+    vector<Vec3d> positions_c;
+    for (int i = 0; i < positions_i.size(); ++i) {
+        positions_c.push_back(cameraTransform(positions_i[i], radii_i[i], resolution));
+    }
+
+    vector<Vec3d> positions_w;
+    for (int i = 0; i < positions_c.size(); ++i) {
+        positions_w.push_back(
+            worldTransform(positions_c[i], drone_positions[i], drone_rotations[i]));
+    }
+
     v.release();
 
 #ifdef USE_DRONE_CONTROL
-    // Return the vehicle
-    action->set_return_to_launch_return_altitude(10.0f);
-    const Action::Result rtl_result = action->return_to_launch();
+    // Return the vehicle to home location
+    const float rtl_altitude = 10.0f;
+    cout << "Using RTL altitude " << rtl_altitude << "m" << endl;
+    action.set_return_to_launch_return_altitude(rtl_altitude);
+
+    const Action::Result rtl_result = action.return_to_launch();
     check_action_result(rtl_result, "Return to launch failed: ");
 
     // Check if vehicle is still in air
-    while (telemetry->in_air()) {
+    while (telemetry.in_air()) {
         cout << CLI_COLOR_YELLOW << "Vehicle is returning..." << CLI_COLOR_NORMAL << endl;
         sleep_for(seconds(2));
     }

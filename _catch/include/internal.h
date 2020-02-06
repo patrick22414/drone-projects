@@ -5,6 +5,8 @@
 #ifndef _CATCH_INTERNAL_H
 #define _CATCH_INTERNAL_H
 
+#define G 9.81
+
 #define CLI_COLOR_RED "\033[31m" // Turn text on console red
 #define CLI_COLOR_GREEN "\033[32m" // Turn text on console red
 #define CLI_COLOR_YELLOW "\033[33m" // Turn text on console red
