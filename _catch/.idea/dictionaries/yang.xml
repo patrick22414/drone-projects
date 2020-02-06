@@ -2,6 +2,7 @@
   <dictionary name="yang">
     <words>
       <w>mavsdk</w>
+      <w>offboard</w>
     </words>
   </dictionary>
 </component>
