@@ -18,8 +18,7 @@ using namespace std;
 using namespace this_thread;
 using namespace chrono;
 
-Vec6d calculateParabola(const vector<Vec3d>& points, const vector<nanoseconds>& timestamps)
-{
+Vec6d calculateParabola(const vector<Vec3d> &points, const vector<nanoseconds> &timestamps) {
     // Find the parameters of a parabola from a series of points in World frame
     assert(points.size() == timestamps.size());
 
@@ -31,19 +30,16 @@ Vec6d calculateParabola(const vector<Vec3d>& points, const vector<nanoseconds>& 
 
     solve(A, b, x, DECOMP_SVD);
 
-    Vec6d parabola((double*)x.data);
+    Vec6d parabola((double *) x.data);
 
     return parabola;
 }
 
-Vec3d worldTransform(
-    const Vec3d& p, const Telemetry::PositionNED& t, const Telemetry::EulerAngle& r)
-{
+Vec3d worldTransform(const Vec3d &p, const Telemetry::PositionNED &t, const Telemetry::EulerAngle &r) {
     // TODO: given a point in the Camera frame, transform the position into the World frame
 }
 
-Vec3d cameraTransform(const Vec2d& ball_position_px, double r_px, const Vec2d& resolution)
-{
+Vec3d cameraTransform(const Vec2d &ball_position_px, double r_px, const Vec2d &resolution) {
     const double tennis_size = 6.6e-2; // tennis ball size 6.6cm
 
     // Pi Camera V1 parameters
@@ -62,9 +58,9 @@ Vec3d cameraTransform(const Vec2d& ball_position_px, double r_px, const Vec2d& r
 
     // camera intrinsic matrix (partial)
     double intrinsics[3][3] = {
-        {focal_length, 0, 0.5 * res_w * pix_size},
-        {0, focal_length, 0.5 * res_h * pix_size},
-        {0, 0, 1},
+        {focal_length, 0,            0.5 * res_w * pix_size},
+        {0,            focal_length, 0.5 * res_h * pix_size},
+        {0,            0,            1},
     };
 
     // object homogeneous coordinates (Image frame) (z = 1)
@@ -91,13 +87,11 @@ Vec3d cameraTransform(const Vec2d& ball_position_px, double r_px, const Vec2d& r
     return {xc, yc, zc};
 }
 
-Offboard::PositionNEDYaw calculateDestination(const Vec6d& parabola, double catch_alt)
-{
+Offboard::PositionNEDYaw calculateDestination(const Vec6d &parabola, double catch_alt) {
     // TODO
 }
 
-optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCapture& v)
-{
+optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCapture &v) {
     /* Get ball position, radius, and timestamp in Image frame
      * Parameters:
      *     v : VideoCapture
@@ -157,8 +151,7 @@ optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCap
     return {};
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
     const string keys =
         "{h help ?       |    | Print this message}"
         "{v video        |    | Use a video file instead of camera}"
