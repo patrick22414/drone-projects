@@ -37,6 +37,21 @@ Vec6d calculateParabola(const vector<Vec3d> &points, const vector<nanoseconds> &
 
 Vec3d worldTransform(const Vec3d &p, const Telemetry::PositionNED &t, const Telemetry::EulerAngle &r) {
     // TODO: given a point in the Camera frame, transform the position into the World frame
+
+    Matx33d drone_attitude_rotation = eulerAngleToRotationMatrix(r);
+    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 0, 0.4});
+
+    // Total extrinsic rotation
+    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
+
+    //
+    Matx31d b(
+            p[0] - t.north_m, p[1] - t.east_m, p[2] - t.down_m
+    );
+
+    Matx31d x = A.solve(b, DECOMP_SVD);
+
+    return Vec3d(x.val);
 }
 
 Vec3d cameraTransform(const Vec2d &ball_position_px, double r_px, const Vec2d &resolution) {
