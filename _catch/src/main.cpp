@@ -188,7 +188,26 @@ Vec6d calculateParabola(const vector<Vec3d> &points, const vector<nanoseconds> &
 
 Offboard::PositionNEDYaw calculateDestination(const Vec6d &parabola, double catch_alt)
 {
-    // TODO
+    // Solve a quadratic equation
+    double a = G_HALF;
+    double b = parabola[2];
+    double c = parabola[5] - catch_alt;
+
+    double delta = b * b - 4 * a * c;
+    if (delta <= 0) {
+        cerr << CLI_COLOR_RED << "How could the delta be <= 0???" << CLI_COLOR_NORMAL << endl;
+        exit(-1);
+    }
+
+    double root1 = (-b + sqrt(delta)) / (2 * a);
+    double root2 = (-b - sqrt(delta)) / (2 * a);
+
+    double t = root1 > root2 ? root1 : root2;
+
+    double catch_x = parabola[0] * t + parabola[3];
+    double catch_y = parabola[1] * t + parabola[4];
+
+    return {static_cast<float>(catch_x), static_cast<float>(catch_y), static_cast<float>(catch_alt), 0};
 }
 
 
@@ -199,7 +218,7 @@ int main(int argc, char *argv[])
             "{v video        |    | Use a video file instead of camera}"
             "{n n-frames     | 10 | Maximum number of frames used to calculate the trajectory of the ball}"
             "{r resolution   | s  | Camera resolution. Valid values are s: 640x480; m: 1296x972; l: 2592x1944}"
-            "{a altitude     | -1 | Altitude used by the drone to catch the ball. Default -1 will remain at current altitude}"
+            "{a catch-alt    | -1 | Altitude used by the drone to catch the ball. Default -1 will remain at current altitude}"
             "{ta takeoff-alt | 3  | Takeoff altitude}"
             "{@connection    | serial:///dev/serial0:921600 | MAVLink connection url}";
 
@@ -214,7 +233,7 @@ int main(int argc, char *argv[])
     // Parse and check arguments
     auto video_path = parser.get<string>("video");
     auto n_frames = parser.get<int>("n-frames");
-    auto altitude = parser.get<int>("altitude");
+    auto catch_alt = parser.get<int>("catch-alt");
     auto takeoff_alt = parser.get<float>("takeoff-alt");
     auto res_char = parser.get<string>("resolution")[0];
     auto connection = parser.get<string>("@connection");
@@ -230,8 +249,8 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    if (altitude < 3 && altitude != -1) {
-        cerr << CLI_COLOR_RED << "Invalid altitude `" << altitude
+    if (catch_alt < 3 && catch_alt != -1) {
+        cerr << CLI_COLOR_RED << "Invalid altitude `" << catch_alt
              << "`. Must be at least 3 meters or -1 (use current altitude)" << CLI_COLOR_NORMAL
              << endl;
         exit(-1);
@@ -284,7 +303,7 @@ int main(int argc, char *argv[])
     // Prepare Drone
     Mavsdk mav;
     auto connection_result = mav.add_any_connection(connection);
-    check_connection_result(connection_result, "Connection failed: ");
+    checkConnectionResult(connection_result, "Connection failed: ");
 
     // Wait for system to connect via heartbeat
     while (!mav.is_connected()) {
@@ -293,7 +312,7 @@ int main(int argc, char *argv[])
         sleep_for(seconds(1));
     }
 
-    System& system = mav.system();
+    System &system = mav.system();
     cout << CLI_COLOR_GREEN << "System connected: " << system.get_uuid() << CLI_COLOR_NORMAL
          << endl;
 
@@ -301,6 +320,12 @@ int main(int argc, char *argv[])
     auto action = Action(system);
     auto offboard = Offboard(system);
     auto telemetry = Telemetry(system);
+
+    telemetry.set_rate_attitude(1.0);
+    telemetry.attitude_euler_angle_async([](Telemetry::EulerAngle ea) {
+        cout << CLI_COLOR_BLUE << "Attitude (euler angles): [Yew: " << ea.yaw_deg << ", Pitch: " << ea.pitch_deg
+             << ", Roll: " << ea.roll_deg << "]" << CLI_COLOR_NORMAL << endl;
+    });
 
     while (!telemetry.health_all_ok()) {
         cout << CLI_COLOR_YELLOW << "Waiting for system to be ready" << CLI_COLOR_NORMAL << endl;
@@ -311,14 +336,14 @@ int main(int argc, char *argv[])
 
     // Arm system
     Action::Result arm_result = action.arm();
-    check_action_result(arm_result, "Arm failed: ");
+    checkActionResult(arm_result, "Arm failed: ");
     cout << "Armed" << endl;
 
     // System Takeoff!!!
     cout << "Using takeoff altitude: " << takeoff_alt << "m" << endl;
     action.set_takeoff_altitude(takeoff_alt);
     Action::Result takeoff_result = action.takeoff();
-    check_action_result(takeoff_result, "Takeoff failed: ");
+    checkActionResult(takeoff_result, "Takeoff failed: ");
     sleep_for(seconds(5));
 #endif // USE_DRONE_CONTROL
 
@@ -367,7 +392,7 @@ int main(int argc, char *argv[])
         positions_c.push_back(cameraTransform(positions_i[i], radii_i[i], resolution));
     }
 
-    cout << "Get following positions in Camera frame:" << endl;
+    cout << "Got the following positions in Camera frame:" << endl;
     for (const auto &p: positions_c) {
         cout << "\t" << p << "," << endl;
     }
@@ -377,13 +402,32 @@ int main(int argc, char *argv[])
         positions_w.push_back(worldTransform(positions_c[i], drone_positions[i], drone_rotations[i]));
     }
 
-    cout << "Get following positions in World frame:" << endl;
+    cout << "Got the following positions in World frame:" << endl;
     for (const auto &p: positions_w) {
         cout << "\t" << p << "," << endl;
     }
 
     auto parabola = calculateParabola(positions_w, timestamps);
-    cout << "Get parabola parameters: " << parabola << endl;
+    cout << "Got parabola parameters: " << parabola << endl;
+
+    if (catch_alt < 3) {
+        catch_alt = telemetry.position().relative_altitude_m;
+    }
+
+    auto destination = calculateDestination(parabola, catch_alt);
+    cout << CLI_COLOR_GREEN << "Will catch the ball at " << destination << CLI_COLOR_NORMAL << endl;
+
+    // Fly to destination in offboard mode
+    Offboard::Result offboard_result = offboard.start();
+    checkOffboardResult(offboard_result, "Offboard start failed: ");
+    cout << "Offboard started" << endl;
+
+    offboard.set_position_ned(destination);
+    sleep_for(seconds(10));
+
+    offboard_result = offboard.stop();
+    checkOffboardResult(offboard_result, "Offboard stop failed: ");
+    cout << "Offboard stopped" << endl;
 
     v.release();
 
@@ -394,7 +438,7 @@ int main(int argc, char *argv[])
     action.set_return_to_launch_return_altitude(rtl_altitude);
 
     const Action::Result rtl_result = action.return_to_launch();
-    check_action_result(rtl_result, "Return to launch failed: ");
+    checkActionResult(rtl_result, "Return to launch failed: ");
 
     // Check if vehicle is still in air
     while (telemetry.in_air()) {
