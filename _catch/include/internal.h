@@ -1,11 +1,7 @@
-//
-// Created by yang on 2/6/20.
-//
-
 #ifndef _CATCH_INTERNAL_H
 #define _CATCH_INTERNAL_H
 
-#define G 9.81
+#define G_HALF (0.5 * 9.81)
 
 #define CLI_COLOR_RED "\033[31m" // Turn text on console red
 #define CLI_COLOR_GREEN "\033[32m" // Turn text on console red
@@ -22,17 +18,19 @@ using namespace cv;
 using namespace std;
 using namespace mavsdk;
 
+
 // Sort contours by descending area
-inline void sortContours(vector<vector<Point2i>>& contours)
+inline void sortContours(vector<vector<Point2i>> &contours)
 {
     sort(
-        contours.begin(), contours.end(), [](const vector<Point2i>& c1, const vector<Point2i>& c2) {
-            return contourArea(c1, false) > contourArea(c2, false);
-        });
+            contours.begin(), contours.end(), [](const vector<Point2i> &c1, const vector<Point2i> &c2) {
+                return contourArea(c1, false) > contourArea(c2, false);
+            });
 }
 
+
 // Handle Action results
-inline void check_action_result(Action::Result result, const string& fail_message)
+inline void check_action_result(Action::Result result, const string &fail_message)
 {
     if (result != Action::Result::SUCCESS) {
         cerr << CLI_COLOR_RED << fail_message << Action::result_str(result) << CLI_COLOR_NORMAL
@@ -41,8 +39,9 @@ inline void check_action_result(Action::Result result, const string& fail_messag
     }
 }
 
+
 // Handle Offboard results
-inline void check_offboard_result(Offboard::Result result, const string& fail_message)
+inline void check_offboard_result(Offboard::Result result, const string &fail_message)
 {
     if (result != Offboard::Result::SUCCESS) {
         cerr << CLI_COLOR_RED << fail_message << Offboard::result_str(result) << CLI_COLOR_NORMAL
@@ -51,8 +50,9 @@ inline void check_offboard_result(Offboard::Result result, const string& fail_me
     }
 }
 
+
 // Handle connection results
-inline void check_connection_result(ConnectionResult result, const string& fail_message)
+inline void check_connection_result(ConnectionResult result, const string &fail_message)
 {
     if (result != ConnectionResult::SUCCESS) {
         cerr << CLI_COLOR_RED << fail_message << connection_result_str(result) << CLI_COLOR_NORMAL
@@ -61,10 +61,12 @@ inline void check_connection_result(ConnectionResult result, const string& fail_
     }
 }
 
-Matx33d eulerAngleToRotationMatrix(const Telemetry::EulerAngle& ea) {
-    double a = ea.roll_deg / CV_PI;
-    double b = ea.pitch_deg / CV_PI;
-    double c = ea.yaw_deg / CV_PI;
+
+Matx33d eulerAngleToRotationMatrix(const Telemetry::EulerAngle &ea)
+{
+    double a = ea.roll_deg / 180 * CV_PI;
+    double b = ea.pitch_deg / 180 * CV_PI;
+    double c = ea.yaw_deg / 180 * CV_PI;
 
     Matx33d mx(
             1, 0, 0,
@@ -86,5 +88,6 @@ Matx33d eulerAngleToRotationMatrix(const Telemetry::EulerAngle& ea) {
 
     return mz * my * mx;
 }
+
 
 #endif //_CATCH_INTERNAL_H
