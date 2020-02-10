@@ -65,7 +65,7 @@ inline void checkConnectionResult(ConnectionResult result, const string &fail_me
 Matx33d eulerAngleToRotationMatrix(const Telemetry::EulerAngle &ea)
 {
     double a = ea.roll_deg / 180 * CV_PI;
-    double b = - ea.pitch_deg / 180 * CV_PI;
+    double b = ea.pitch_deg / 180 * CV_PI;
     double c = ea.yaw_deg / 180 * CV_PI;
 
     Matx33d mx(

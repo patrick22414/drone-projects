@@ -81,9 +81,9 @@ optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCap
 }
 
 
-Vec3d cameraTransform(const Vec2d &ball_position_px, double r_px, const Vec2d &resolution)
+Vec3d cameraTransform(const Vec2d &ball_position_px, double ball_radius_px, const Vec2d &resolution)
 {
-    const double tennis_size = 6.6e-2; // tennis ball size 6.6cm
+    const double ball_radius = 3.3e-2; // tennis ball radius 3.3 cm
 
     // Pi Camera V1 parameters
     const double sensor_w_px = 2592; // sensor width in pixels
@@ -91,38 +91,41 @@ Vec3d cameraTransform(const Vec2d &ball_position_px, double r_px, const Vec2d &r
     const double focal_length = 3.6e-3; // focal length 3.6mm
     const double real_pixel_size = 1.4e-6; // real pixel size 1.4um
 
-    double u_px = ball_position_px[0];
-    double v_px = ball_position_px[1];
+    double res_w_px = resolution[0];
+    double res_h_px = resolution[1];
 
-    double res_w = resolution[0];
-    double res_h = resolution[1];
+    double pix_size = real_pixel_size * (sensor_w_px / res_w_px); // relative pixel size with binning
 
-    double pix_size = real_pixel_size * (sensor_w_px / res_w); // relative pixel size with binning
+    double ball_i_x = ball_position_px[0] * pix_size; // ball position x, Image frame
+    double ball_i_y = ball_position_px[1] * pix_size; // ball position y, Image frame
 
-    // camera intrinsic matrix (partial)
+    // camera intrinsic matrix
     double intrinsics[3][3] = {
-            {focal_length, 0,            0.5 * res_w * pix_size},
-            {0,            focal_length, 0.5 * res_h * pix_size},
+            {focal_length, 0,            0.5 * (res_w_px - 1) * pix_size},
+            {0,            focal_length, 0.5 * (res_h_px - 1) * pix_size},
             {0,            0,            1},
     };
 
-    // object homogeneous coordinates (Image frame) (z = 1)
-    double object_i_homo[3] = {u_px * pix_size, v_px * pix_size, 1};
+    // object homogeneous coordinates, Image frame (z = 1)
+    double object_i_homo[3] = {ball_i_x, ball_i_y, 1};
 
     Mat A(3, 3, CV_64F, intrinsics);
     Mat b(3, 1, CV_64F, object_i_homo);
     Mat x(3, 1, CV_64F);
     solve(A, b, x, DECOMP_SVD);
 
-    // ray direction (xc1, yc1 , 1)
+    // ray direction, expressed by (0, 0, 0) -> (xc1, yc1, 1)
     double xc1 = x.at<double>(0);
     double yc1 = x.at<double>(1);
 
     // distance from camera to ball
-    double distance = tennis_size * focal_length / (r_px * pix_size);
+    double distance = ball_radius * sqrt(focal_length * focal_length + ball_i_x * ball_i_x + ball_i_y * ball_i_y) /
+                      (ball_radius_px * pix_size);
+
+    // distance from camera to (xc1, yc1, 1)
     double distance1 = sqrt(xc1 * xc1 + yc1 * yc1 + 1);
 
-    // object coordinates (Camera frame)
+    // object coordinates, Camera frame
     double xc = xc1 * distance / distance1;
     double yc = yc1 * distance / distance1;
     double zc = sqrt(distance * distance - xc * xc - yc * yc);
@@ -136,10 +139,11 @@ Vec3d worldTransform(const Vec3d &p, const Telemetry::PositionNED &t, const Tele
     // TODO: given a point in the Camera frame, transform the position into the World frame
 
     Matx33d drone_attitude_rotation = eulerAngleToRotationMatrix(r);
-    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 0, -65});
+//    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 0, -65});
 
     // Total extrinsic rotation
-    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
+//    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
+    Matx33d A = drone_attitude_rotation;
 
     //
     Matx31d b(
@@ -191,7 +195,7 @@ Offboard::PositionNEDYaw calculateDestination(const Vec6d &parabola, double catc
     // Solve a quadratic equation
     double a = G_HALF;
     double b = parabola[2];
-    double c = parabola[5] - catch_alt;
+    double c = parabola[5] - (-catch_alt);
 
     double delta = b * b - 4 * a * c;
     if (delta <= 0) {
@@ -299,7 +303,7 @@ int main(int argc, char *argv[])
 
     test_image.release();
 
-#ifdef USE_DRONE_CONTROL
+#ifdef USE_DRONE
     // Prepare Drone
     Mavsdk mav;
     auto connection_result = mav.add_any_connection(connection);
@@ -345,7 +349,7 @@ int main(int argc, char *argv[])
     Action::Result takeoff_result = action.takeoff();
     checkActionResult(takeoff_result, "Takeoff failed: ");
     sleep_for(seconds(5));
-#endif // USE_DRONE_CONTROL
+#endif // USE_DRONE
 
     steady_clock::time_point t0 = steady_clock::now();
 
@@ -371,22 +375,33 @@ int main(int argc, char *argv[])
         auto result = getBallInImage(v);
 
         if (result.has_value()) {
-#ifdef USE_DRONE_CONTROL
+#ifdef USE_DRONE
             drone_positions.push_back(telemetry.position_velocity_ned().position);
             drone_rotations.push_back(telemetry.attitude_euler_angle());
-#endif // USE_DRONE_CONTROL
+#else
+            drone_positions.push_back({0, 0, -3});
+            drone_rotations.push_back({0, 0, 0});
+#endif // USE_DRONE
             auto values = result.value();
             positions_i.push_back(get<0>(values));
             radii_i.push_back(get<1>(values));
-            timestamps.push_back(duration_cast<nanoseconds>(get<2>(values) - t0));
+
+            if (parser.has("video")) {
+                timestamps.emplace_back((int) 1e9 / 30 * (i + 1)); // assume a 30FPS video
+            } else {
+                timestamps.push_back(duration_cast<nanoseconds>(get<2>(values) - t0));
+            }
         }
     }
+
+    v.release();
 
     cout << "Positions acquired in " << positions_i.size() << " frames" << endl;
     cout << "Total interval: "
          << duration_cast<milliseconds>(timestamps[timestamps.size() - 1] - timestamps[0]).count()
          << "ms" << endl;
 
+    // A series of coordinate transforms
     vector<Vec3d> positions_c;
     for (int i = 0; i < positions_i.size(); ++i) {
         positions_c.push_back(cameraTransform(positions_i[i], radii_i[i], resolution));
@@ -410,13 +425,17 @@ int main(int argc, char *argv[])
     auto parabola = calculateParabola(positions_w, timestamps);
     cout << "Got parabola parameters: " << parabola << endl;
 
+#ifdef USE_DRONE
     if (catch_alt < 3) {
         catch_alt = telemetry.position().relative_altitude_m;
     }
+#endif
 
     auto destination = calculateDestination(parabola, catch_alt);
     cout << CLI_COLOR_GREEN << "Will catch the ball at " << destination << CLI_COLOR_NORMAL << endl;
 
+
+#ifdef USE_DRONE
     // Fly to destination in offboard mode
     Offboard::Result offboard_result = offboard.start();
     checkOffboardResult(offboard_result, "Offboard start failed: ");
@@ -429,9 +448,6 @@ int main(int argc, char *argv[])
     checkOffboardResult(offboard_result, "Offboard stop failed: ");
     cout << "Offboard stopped" << endl;
 
-    v.release();
-
-#ifdef USE_DRONE_CONTROL
     // Return the vehicle to home location
     const float rtl_altitude = 10.0f;
     cout << "Using RTL altitude " << rtl_altitude << "m" << endl;
@@ -451,7 +467,7 @@ int main(int argc, char *argv[])
     // We are relying on auto-disarming but let's keep watching the telemetry for a bit longer.
     sleep_for(seconds(2));
     cout << "Finished." << endl;
-#endif // USE_DRONE_CONTROL
+#endif // USE_DRONE
 
     return 0;
 }
