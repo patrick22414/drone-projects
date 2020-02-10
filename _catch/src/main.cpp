@@ -40,7 +40,7 @@ optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCap
     Mat im_grey;
     cvtColor(im, im_grey, COLOR_BGR2GRAY);
 
-    threshold(im_grey, im_grey, 90, 255, THRESH_BINARY_INV);
+    threshold(im_grey, im_grey, 127, 255, THRESH_BINARY_INV);
 
 #if 0
     imshow("im", im);
@@ -134,20 +134,20 @@ Vec3d cameraTransform(const Vec2d &ball_position_px, double ball_radius_px, cons
 }
 
 
-Vec3d worldTransform(const Vec3d &p, const Telemetry::PositionNED &t, const Telemetry::EulerAngle &r)
+Vec3d worldTransform(const Vec3d &p_c, const Telemetry::PositionNED &t, const Telemetry::EulerAngle &r)
 {
     // TODO: given a point in the Camera frame, transform the position into the World frame
 
     Matx33d drone_attitude_rotation = eulerAngleToRotationMatrix(r);
-//    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 0, -65});
+    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 180, 90 + 20});
 
     // Total extrinsic rotation
-//    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
-    Matx33d A = drone_attitude_rotation;
+    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
+//    Matx33d A = drone_attitude_rotation;
 
     //
     Matx31d b(
-            p[0] - t.north_m, p[1] - t.east_m, p[2] - t.down_m
+            p_c[0] + t.north_m, p_c[1] + t.east_m, p_c[2] + t.down_m
     );
 
     Matx31d x = A.solve(b, DECOMP_SVD);
@@ -169,8 +169,8 @@ Vec6d calculateParabola(const vector<Vec3d> &points, const vector<nanoseconds> &
         double s = 1e-9 * timestamps[i].count(); // time in second
 
         int A_start = i * 3 * 6;
-        A_data[A_start + 3] = A_data[A_start + 13] = A_data[A_start + 23] = s;
-        A_data[A_start + 6] = A_data[A_start + 16] = A_data[A_start + 26] = 1;
+        A_data[A_start + 0] = A_data[A_start + 7] = A_data[A_start + 14] = s;
+        A_data[A_start + 3] = A_data[A_start + 10] = A_data[A_start + 17] = 1;
 
         int b_start = i * 3;
         b_data[b_start + 0] = points[i][0];
@@ -192,10 +192,20 @@ Vec6d calculateParabola(const vector<Vec3d> &points, const vector<nanoseconds> &
 
 Offboard::PositionNEDYaw calculateDestination(const Vec6d &parabola, double catch_alt)
 {
+    // catch altitude should be negated in NED frame
+    catch_alt = -catch_alt;
+
+    double vx = parabola[0]; // x speed, assuming unchanged
+    double vy = parabola[1]; // y speed, assuming unchanged
+    double vz = parabola[2]; // initial z speed
+    double x0 = parabola[3]; // initial x position
+    double y0 = parabola[4]; // initial y position
+    double z0 = parabola[5]; // initial z position
+
     // Solve a quadratic equation
     double a = G_HALF;
-    double b = parabola[2];
-    double c = parabola[5] - (-catch_alt);
+    double b = vz;
+    double c = z0 - catch_alt;
 
     double delta = b * b - 4 * a * c;
     if (delta <= 0) {
@@ -208,10 +218,10 @@ Offboard::PositionNEDYaw calculateDestination(const Vec6d &parabola, double catc
 
     double t = root1 > root2 ? root1 : root2;
 
-    double catch_x = parabola[0] * t + parabola[3];
-    double catch_y = parabola[1] * t + parabola[4];
+    double catch_x = vx * t + x0;
+    double catch_y = vy * t + y0;
 
-    return {static_cast<float>(catch_x), static_cast<float>(catch_y), static_cast<float>(catch_alt), 0};
+    return {(float) catch_x, (float) catch_y, (float) catch_alt, 0};
 }
 
 
@@ -325,11 +335,13 @@ int main(int argc, char *argv[])
     auto offboard = Offboard(system);
     auto telemetry = Telemetry(system);
 
+#if 0
     telemetry.set_rate_attitude(1.0);
     telemetry.attitude_euler_angle_async([](Telemetry::EulerAngle ea) {
         cout << CLI_COLOR_BLUE << "Attitude (euler angles): [Yew: " << ea.yaw_deg << ", Pitch: " << ea.pitch_deg
              << ", Roll: " << ea.roll_deg << "]" << CLI_COLOR_NORMAL << endl;
     });
+#endif
 
     while (!telemetry.health_all_ok()) {
         cout << CLI_COLOR_YELLOW << "Waiting for system to be ready" << CLI_COLOR_NORMAL << endl;
@@ -379,7 +391,7 @@ int main(int argc, char *argv[])
             drone_positions.push_back(telemetry.position_velocity_ned().position);
             drone_rotations.push_back(telemetry.attitude_euler_angle());
 #else
-            drone_positions.push_back({0, 0, -3});
+            drone_positions.push_back({0, 0, takeoff_alt});
             drone_rotations.push_back({0, 0, 0});
 #endif // USE_DRONE
             auto values = result.value();
@@ -437,11 +449,12 @@ int main(int argc, char *argv[])
 
 #ifdef USE_DRONE
     // Fly to destination in offboard mode
+    offboard.set_position_ned(destination);
+
     Offboard::Result offboard_result = offboard.start();
     checkOffboardResult(offboard_result, "Offboard start failed: ");
     cout << "Offboard started" << endl;
 
-    offboard.set_position_ned(destination);
     sleep_for(seconds(10));
 
     offboard_result = offboard.stop();
@@ -449,7 +462,7 @@ int main(int argc, char *argv[])
     cout << "Offboard stopped" << endl;
 
     // Return the vehicle to home location
-    const float rtl_altitude = 10.0f;
+    const float rtl_altitude = 5.0f;
     cout << "Using RTL altitude " << rtl_altitude << "m" << endl;
     action.set_return_to_launch_return_altitude(rtl_altitude);
 

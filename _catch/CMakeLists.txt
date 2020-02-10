@@ -9,7 +9,7 @@ find_package(MAVSDK REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(include)
 
-#add_compile_definitions(USE_DRONE)
+add_compile_definitions(USE_DRONE)
 
 add_executable(catch src/main.cpp include/internal.h)
 

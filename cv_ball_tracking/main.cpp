@@ -32,9 +32,9 @@ vector<double> solveXY(double u_px, double v_px)
 
     double object_i_homo[3] = {u_px * pix_size, v_px * pix_size, 1};
 
-    Mat A = Mat(3, 3, CV_64FC1, intrinsic);
-    Mat b = Mat(3, 1, CV_64FC1, object_i_homo);
-    Mat x = Mat(3, 1, CV_64FC1);
+    Mat A = Mat(3, 3, CV_64F, intrinsic);
+    Mat b = Mat(3, 1, CV_64F, object_i_homo);
+    Mat x = Mat(3, 1, CV_64F);
     solve(A, b, x, DECOMP_SVD);
 
     vector<double> object_c_homo;
@@ -45,7 +45,7 @@ vector<double> solveXY(double u_px, double v_px)
 
 int main()
 {
-    VideoCapture v = VideoCapture("/home/yang/Videos/ball-9-ground.mp4");
+    VideoCapture v = VideoCapture("/home/yang/Videos/ball-11-ground.mp4");
 
     if (!v.isOpened()) {
         cerr << "Cannot open capture" << endl;
@@ -57,13 +57,12 @@ int main()
     Mat element = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
     while (true) {
         if (!v.read(im)) {
-            cerr << "Cannot read frame" << endl;
             break;
         }
 
         cvtColor(im, imGrey, COLOR_BGR2GRAY);
 
-        threshold(imGrey, imGrey, 90, 255, THRESH_BINARY_INV);
+        threshold(imGrey, imGrey, 127, 255, THRESH_BINARY_INV);
         //        morphologyEx(im_grey, im_grey, MORPH_DILATE, element);
 
         vector<vector<Point2i>> contours;
@@ -77,11 +76,11 @@ int main()
                 double area = m.m00;
 
                 if (area > 20) {
-                    auto rotatedRect = fitEllipse(contour);
-                    Point2f vertices[4];
-                    rotatedRect.points(vertices);
-                    for (int i = 0; i < 4; i++)
-                        line(im, vertices[i], vertices[(i + 1) % 4], Scalar(0, 0, 255), 1);
+//                    auto rotatedRect = fitEllipse(contour);
+//                    Point2f vertices[4];
+//                    rotatedRect.points(vertices);
+//                    for (int i = 0; i < 4; i++)
+//                        line(im, vertices[i], vertices[(i + 1) % 4], Scalar(0, 0, 255), 1);
 
                     double xi = m.m10 / area;
                     double yi = m.m01 / area;
