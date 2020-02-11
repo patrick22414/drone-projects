@@ -51,11 +51,6 @@ int main(int argc, char* argv[])
 
         // encode the frame into the video file stream
         writer.write(src);
-
-        // show live and wait for a key with timeout long enough to show images
-        imshow("Live", src);
-        if (waitKey(5) >= 0)
-            break;
     }
 
     // the videofile will be closed and released automatically in VideoWriter destructor
