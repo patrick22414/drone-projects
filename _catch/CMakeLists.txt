@@ -11,7 +11,7 @@ include_directories(include)
 
 add_compile_definitions(USE_DRONE)
 
-add_executable(catch src/main.cpp include/internal.h)
+add_executable(catch src/main.cpp)
 
 target_link_libraries(catch
         ${OpenCV_LIBS}
