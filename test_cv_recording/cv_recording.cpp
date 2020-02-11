@@ -11,7 +11,6 @@ int main(int argc, char* argv[])
     VideoCapture cap(0, CAP_V4L2);
     cap.set(CAP_PROP_FRAME_WIDTH, 640);
     cap.set(CAP_PROP_FRAME_HEIGHT, 480);
-    cap.set(CAP_PROP_WB_TEMPERATURE, 6000);
 
     // check if we succeeded
     if (!cap.isOpened()) {
@@ -55,6 +54,6 @@ int main(int argc, char* argv[])
         writer.write(src);
     }
 
-    // the videofile will be closed and released automatically in VideoWriter destructor
+    // the video file will be closed and released automatically in VideoWriter destructor
     return 0;
 }
