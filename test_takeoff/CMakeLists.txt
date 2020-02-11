@@ -11,7 +11,7 @@ endif()
 find_package(MAVSDK REQUIRED)
 
 add_executable(takeoff
-    takeoff_and_land.cpp
+        takeoff.cpp
 )
 
 target_link_libraries(takeoff
