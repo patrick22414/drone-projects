@@ -15,9 +15,9 @@ using namespace mavsdk;
 using namespace std::this_thread;
 using namespace std::chrono;
 
-#define ERROR_CONSOLE_TEXT "\033[31m" // Turn text on console red
+#define ERROR_CONSOLE_TEXT "\033[31m"     // Turn text on console red
 #define TELEMETRY_CONSOLE_TEXT "\033[34m" // Turn text on console blue
-#define NORMAL_CONSOLE_TEXT "\033[0m" // Restore normal console colour
+#define NORMAL_CONSOLE_TEXT "\033[0m"     // Restore normal console colour
 
 void usage(std::string bin_name)
 {
@@ -31,8 +31,7 @@ void usage(std::string bin_name)
 
 void component_discovered(ComponentType component_type)
 {
-    std::cout << NORMAL_CONSOLE_TEXT << "Discovered a component with type "
-              << unsigned(component_type) << std::endl;
+    std::cout << NORMAL_CONSOLE_TEXT << "Discovered a component with type " << unsigned(component_type) << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -43,7 +42,7 @@ int main(int argc, char** argv)
 
     bool discovered_system = false;
     if (argc == 2) {
-        connection_url = argv[1];
+        connection_url    = argv[1];
         connection_result = dc.add_any_connection(connection_url);
     } else {
         usage(argv[0]);
@@ -51,8 +50,7 @@ int main(int argc, char** argv)
     }
 
     if (connection_result != ConnectionResult::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT
-                  << "Connection failed: " << connection_result_str(connection_result)
+        std::cout << ERROR_CONSOLE_TEXT << "Connection failed: " << connection_result_str(connection_result)
                   << NORMAL_CONSOLE_TEXT << std::endl;
         return 1;
     }
@@ -73,8 +71,7 @@ int main(int argc, char** argv)
     sleep_for(seconds(2));
 
     if (!discovered_system) {
-        std::cout << ERROR_CONSOLE_TEXT << "No system found, exiting." << NORMAL_CONSOLE_TEXT
-                  << std::endl;
+        std::cout << ERROR_CONSOLE_TEXT << "No system found, exiting." << NORMAL_CONSOLE_TEXT << std::endl;
         return 1;
     }
 
@@ -83,13 +80,12 @@ int main(int argc, char** argv)
     system.register_component_discovered_callback(component_discovered);
 
     auto telemetry = std::make_shared<Telemetry>(system);
-    auto action = std::make_shared<Action>(system);
+    auto action    = std::make_shared<Action>(system);
 
     // We want to listen to the altitude of the drone at 0.5 Hz.
     const Telemetry::Result set_rate_result = telemetry->set_rate_position(0.5);
     if (set_rate_result != Telemetry::Result::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT
-                  << "Setting rate failed:" << Telemetry::result_str(set_rate_result)
+        std::cout << ERROR_CONSOLE_TEXT << "Setting rate failed:" << Telemetry::result_str(set_rate_result)
                   << NORMAL_CONSOLE_TEXT << std::endl;
         return 1;
     }
@@ -103,7 +99,7 @@ int main(int argc, char** argv)
     });
 
     // Check if vehicle is ready to arm
-    while (telemetry->health_all_ok() != true) {
+    while (!telemetry->health_all_ok()) {
         std::cout << "Vehicle is getting ready to arm" << std::endl;
         sleep_for(seconds(1));
     }
@@ -113,8 +109,8 @@ int main(int argc, char** argv)
     const Action::Result arm_result = action->arm();
 
     if (arm_result != Action::Result::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT << "Arming failed:" << Action::result_str(arm_result)
-                  << NORMAL_CONSOLE_TEXT << std::endl;
+        std::cout << ERROR_CONSOLE_TEXT << "Arming failed:" << Action::result_str(arm_result) << NORMAL_CONSOLE_TEXT
+                  << std::endl;
         return 1;
     }
 
@@ -146,8 +142,8 @@ int main(int argc, char** argv)
     std::cout << "Landing..." << std::endl;
     const Action::Result land_result = action->land();
     if (land_result != Action::Result::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT << "Land failed:" << Action::result_str(land_result)
-                  << NORMAL_CONSOLE_TEXT << std::endl;
+        std::cout << ERROR_CONSOLE_TEXT << "Land failed:" << Action::result_str(land_result) << NORMAL_CONSOLE_TEXT
+                  << std::endl;
         return 1;
     }
 

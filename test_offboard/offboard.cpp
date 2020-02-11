@@ -22,16 +22,15 @@ using std::this_thread::sleep_for;
 using std::chrono::milliseconds;
 using std::chrono::seconds;
 
-#define ERROR_CONSOLE_TEXT "\033[31m" // Turn text on console red
+#define ERROR_CONSOLE_TEXT "\033[31m"     // Turn text on console red
 #define TELEMETRY_CONSOLE_TEXT "\033[34m" // Turn text on console blue
-#define NORMAL_CONSOLE_TEXT "\033[0m" // Restore normal console colour
+#define NORMAL_CONSOLE_TEXT "\033[0m"     // Restore normal console colour
 
 // Handles Action's result
 inline void action_error_exit(Action::Result result, const std::string& message)
 {
     if (result != Action::Result::SUCCESS) {
-        std::cerr << ERROR_CONSOLE_TEXT << message << Action::result_str(result)
-                  << NORMAL_CONSOLE_TEXT << std::endl;
+        std::cerr << ERROR_CONSOLE_TEXT << message << Action::result_str(result) << NORMAL_CONSOLE_TEXT << std::endl;
         exit(EXIT_FAILURE);
     }
 }
@@ -40,8 +39,7 @@ inline void action_error_exit(Action::Result result, const std::string& message)
 inline void offboard_error_exit(Offboard::Result result, const std::string& message)
 {
     if (result != Offboard::Result::SUCCESS) {
-        std::cerr << ERROR_CONSOLE_TEXT << message << Offboard::result_str(result)
-                  << NORMAL_CONSOLE_TEXT << std::endl;
+        std::cerr << ERROR_CONSOLE_TEXT << message << Offboard::result_str(result) << NORMAL_CONSOLE_TEXT << std::endl;
         exit(EXIT_FAILURE);
     }
 }
@@ -50,14 +48,13 @@ inline void offboard_error_exit(Offboard::Result result, const std::string& mess
 inline void connection_error_exit(ConnectionResult result, const std::string& message)
 {
     if (result != ConnectionResult::SUCCESS) {
-        std::cerr << ERROR_CONSOLE_TEXT << message << connection_result_str(result)
-                  << NORMAL_CONSOLE_TEXT << std::endl;
+        std::cerr << ERROR_CONSOLE_TEXT << message << connection_result_str(result) << NORMAL_CONSOLE_TEXT << std::endl;
         exit(EXIT_FAILURE);
     }
 }
 
 // Logs during Offboard control
-inline void offboard_log(const std::string& offb_mode, const std::string msg)
+inline void offboard_log(const std::string& offb_mode, const std::string& msg)
 {
     std::cout << "[" << offb_mode << "] " << msg << std::endl;
 }
@@ -84,11 +81,11 @@ bool offb_ctrl_ned(std::shared_ptr<mavsdk::Offboard> offboard)
     {
         const float step_size = 0.01f;
         const float one_cycle = 2.0f * (float)M_PI;
-        const unsigned steps = 2 * unsigned(one_cycle / step_size);
+        const unsigned steps  = 2 * unsigned(one_cycle / step_size);
 
         offboard_log(offb_mode, "Go North and back South");
         for (unsigned i = 0; i < steps; ++i) {
-            float vx = 5.0f * sinf(i * step_size);
+            float vx = 5.0f * sinf((float)i * step_size);
             offboard->set_velocity_ned({vx, 0.0f, 0.0f, 90.0f});
             sleep_for(milliseconds(10));
         }
@@ -209,7 +206,7 @@ bool offb_ctrl_attitude(std::shared_ptr<mavsdk::Offboard> offboard)
     return true;
 }
 
-void usage(std::string bin_name)
+void usage(const std::string& bin_name)
 {
     std::cout << NORMAL_CONSOLE_TEXT << "Usage : " << bin_name << " <connection_url>" << std::endl
               << "Connection URL format should be :" << std::endl
@@ -226,7 +223,7 @@ int main(int argc, char** argv)
     ConnectionResult connection_result;
 
     if (argc == 2) {
-        connection_url = argv[1];
+        connection_url    = argv[1];
         connection_result = dc.add_any_connection(connection_url);
     } else {
         usage(argv[0]);
@@ -234,8 +231,7 @@ int main(int argc, char** argv)
     }
 
     if (connection_result != ConnectionResult::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT
-                  << "Connection failed: " << connection_result_str(connection_result)
+        std::cout << ERROR_CONSOLE_TEXT << "Connection failed: " << connection_result_str(connection_result)
                   << NORMAL_CONSOLE_TEXT << std::endl;
         return 1;
     }
@@ -248,15 +244,14 @@ int main(int argc, char** argv)
 
     // System got discovered.
     System& system = dc.system();
-    auto action = std::make_shared<Action>(system);
-    auto offboard = std::make_shared<Offboard>(system);
+    auto action    = std::make_shared<Action>(system);
+    auto offboard  = std::make_shared<Offboard>(system);
     auto telemetry = std::make_shared<Telemetry>(system);
 
     // We want to listen to the altitude of the drone at 0.5 Hz.
     const Telemetry::Result set_rate_result = telemetry->set_rate_position(0.5);
     if (set_rate_result != Telemetry::Result::SUCCESS) {
-        std::cout << ERROR_CONSOLE_TEXT
-                  << "Setting rate failed:" << Telemetry::result_str(set_rate_result)
+        std::cout << ERROR_CONSOLE_TEXT << "Setting rate failed:" << Telemetry::result_str(set_rate_result)
                   << NORMAL_CONSOLE_TEXT << std::endl;
         return 1;
     }
@@ -299,7 +294,7 @@ int main(int argc, char** argv)
 
     //  using body co-ordinates
     bool ret = offb_ctrl_body(offboard);
-    if (ret == false) {
+    if (!ret) {
         return EXIT_FAILURE;
     }
 

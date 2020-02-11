@@ -16,7 +16,7 @@ endif()
 find_package(MAVSDK REQUIRED)
 
 add_executable(offboard
-    offboard_velocity.cpp
+        offboard.cpp
 )
 
 target_link_libraries(offboard

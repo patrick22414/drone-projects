@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 
-project(takeoff_and_land)
+project(takeoff)
 
 if(NOT MSVC)
     add_definitions("-std=c++11 -Wall -Wextra -Werror")
@@ -10,11 +10,11 @@ endif()
 
 find_package(MAVSDK REQUIRED)
 
-add_executable(takeoff_and_land
+add_executable(takeoff
     takeoff_and_land.cpp
 )
 
-target_link_libraries(takeoff_and_land
+target_link_libraries(takeoff
     MAVSDK::mavsdk_telemetry
     MAVSDK::mavsdk_action
     MAVSDK::mavsdk
