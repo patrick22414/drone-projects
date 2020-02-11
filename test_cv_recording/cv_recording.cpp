@@ -29,9 +29,9 @@ int main(int argc, char* argv[])
 
     //--- INITIALIZE VIDEOWRITER
     VideoWriter writer;
-    auto codec    = VideoWriter::fourcc('X', '2', '6', '4');
+    auto codec    = VideoWriter::fourcc('m', 'p', '4', 'v');
     auto fps      = 30.0;
-    auto filename = "./demo.h264";
+    auto filename = "./demo.mp4";
     writer.open(filename, codec, fps, src.size(), isColor);
     // check if we succeeded
     if (!writer.isOpened()) {
