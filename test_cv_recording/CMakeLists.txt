@@ -10,4 +10,5 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 add_executable(cv_recording cv_recording.cpp)
 
 target_link_libraries(cv_recording
+        stdc++fs
         ${OpenCV_LIBS})
