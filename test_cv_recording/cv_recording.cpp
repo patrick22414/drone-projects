@@ -1,8 +1,29 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <filesystem>
 
 using namespace cv;
 using namespace std;
+
+namespace fs = std::filesystem;
+
+string generateVideoFilename(const string& suffix = "air")
+{
+    fs::path full_filename = fs::path(getenv("HOME")) / "Videos";
+    stringstream filename;
+    for (int i = 1;; ++i) {
+        filename.str(string());
+        filename << "v" << i << "-" << suffix << ".mp4";
+
+        if (!fs::exists(fs::path(full_filename) / filename.str())) {
+            break;
+        }
+    }
+
+    cout << "Using video filename " << fs::path(full_filename) / filename.str() << endl;
+
+    return fs::path(full_filename) / filename.str();
+}
 
 int main(int argc, char* argv[])
 {
@@ -32,8 +53,10 @@ int main(int argc, char* argv[])
     VideoWriter writer;
     auto codec    = VideoWriter::fourcc('m', 'p', '4', 'v');
     auto fps      = 30.0;
-    auto filename = "./demo.mp4";
+    auto filename = argc > 1 ? generateVideoFilename(argv[1]) : generateVideoFilename();
+
     writer.open(filename, codec, fps, src.size(), isColor);
+
     // check if we succeeded
     if (!writer.isOpened()) {
         cerr << "Could not open the output video file for write\n";
