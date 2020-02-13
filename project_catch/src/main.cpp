@@ -1,222 +1,24 @@
-#include <opencv2/opencv.hpp>
-
 #include <mavsdk/mavsdk.h>
 #include <mavsdk/plugins/action/action.h>
 #include <mavsdk/plugins/offboard/offboard.h>
 #include <mavsdk/plugins/telemetry/telemetry.h>
+#include <opencv2/opencv.hpp>
 
 #include <chrono>
 #include <iostream>
-#include <thread>
 #include <optional>
+#include <thread>
 
-#include "cxxopts.hpp"
-#include "internal.h"
+#include "common.h"
+#include "cxxopts.h"
+#include "transforms.h"
 
 using namespace cv;
 using namespace mavsdk;
+
 using namespace std;
-using namespace this_thread;
-using namespace chrono;
-
-optional<tuple<Vec2d, double, steady_clock::time_point>> getBallInImage(VideoCapture& v)
-{
-    /* Get ball position, radius, and timestamp in Image frame
-     * Parameters:
-     *     v : VideoCapture
-     * Returns:
-     *     Vec2d     : {xi_px, yi_px}
-     *     double    : ri_px
-     *     timestamp : steady_clock right before the image was captured
-     */
-    Mat im;
-
-    auto timestamp = steady_clock::now();
-    if (!v.read(im)) {
-        cerr << CLI_COLOR_RED << "Cannot read frame" << CLI_COLOR_NORMAL << endl;
-        exit(-1);
-    }
-
-    Mat im_grey;
-    cvtColor(im, im_grey, COLOR_BGR2GRAY);
-
-    threshold(im_grey, im_grey, 127, 255, THRESH_BINARY_INV);
-
-#if 0
-    imshow("im", im);
-    imshow("im_grey", im_grey);
-    waitKey(-1);
-    destroyAllWindows();
-#endif
-
-    vector<vector<Point2i>> contours;
-    vector<Vec4i> hierarchy;
-    findContours(im_grey, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-
-    im.release();
-    im_grey.release();
-
-    if (!contours.empty()) {
-        sortContours(contours);
-        auto largestContour = contours[0];
-
-        auto m = moments(largestContour);
-
-        double area = m.m00;
-        double xi   = 0;
-        double yi   = 0;
-        double ri   = 0;
-        if (area > 25) {
-            xi = m.m10 / area;
-            yi = m.m01 / area;
-            ri = sqrt(area / CV_PI);
-
-            return tuple<Vec2d, double, steady_clock::time_point>({xi, yi}, ri, timestamp);
-        } else {
-            return {};
-        }
-    }
-
-    return {};
-}
-
-Vec3d cameraTransform(const Vec2d& ball_position_px, double ball_radius_px, const Vec2i& resolution)
-{
-    const double ball_radius = 3.3e-2; // tennis ball radius 3.3 cm
-
-    // Pi Camera V1 parameters
-    const double sensor_w_px     = 2592;   // sensor width in pixels
-    const double sensor_h_px     = 1944;   // sensor height in pixels
-    const double focal_length    = 3.6e-3; // focal length 3.6mm
-    const double real_pixel_size = 1.4e-6; // real pixel size 1.4um
-
-    double res_w_px = resolution[0];
-    double res_h_px = resolution[1];
-
-    double pix_size = real_pixel_size * (sensor_w_px / res_w_px); // relative pixel size with binning
-
-    double ball_i_x = ball_position_px[0] * pix_size; // ball position x, Image frame
-    double ball_i_y = ball_position_px[1] * pix_size; // ball position y, Image frame
-
-    // camera intrinsic matrix
-    double intrinsics[3][3] = {
-        {focal_length, 0, 0.5 * (res_w_px - 1) * pix_size},
-        {0, focal_length, 0.5 * (res_h_px - 1) * pix_size},
-        {0, 0, 1},
-    };
-
-    // object homogeneous coordinates, Image frame (z = 1)
-    double object_i_homo[3] = {ball_i_x, ball_i_y, 1};
-
-    Mat A(3, 3, CV_64F, intrinsics);
-    Mat b(3, 1, CV_64F, object_i_homo);
-    Mat x(3, 1, CV_64F);
-    solve(A, b, x, DECOMP_SVD);
-
-    // ray direction, expressed by (0, 0, 0) -> (xc1, yc1, 1)
-    double xc1 = x.at<double>(0);
-    double yc1 = x.at<double>(1);
-
-    // distance from camera to ball
-    double distance = ball_radius * sqrt(focal_length * focal_length + ball_i_x * ball_i_x + ball_i_y * ball_i_y) /
-                      (ball_radius_px * pix_size);
-
-    // distance from camera to (xc1, yc1, 1)
-    double distance1 = sqrt(xc1 * xc1 + yc1 * yc1 + 1);
-
-    // object coordinates, Camera frame
-    double xc = xc1 * distance / distance1;
-    double yc = yc1 * distance / distance1;
-    double zc = sqrt(distance * distance - xc * xc - yc * yc);
-
-    return {xc, yc, zc};
-}
-
-Vec3d worldTransform(const Vec3d& p_c, const Telemetry::PositionNED& t, const Telemetry::EulerAngle& r)
-{
-    // TODO: given a point in the Camera frame, transform the position into the World frame
-
-    Matx33d drone_attitude_rotation  = eulerAngleToRotationMatrix(r);
-    Matx33d camera_mounting_rotation = eulerAngleToRotationMatrix({0, 180, 90 + 20});
-
-    // Total extrinsic rotation
-    Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
-    //    Matx33d A = drone_attitude_rotation;
-
-    //
-    Matx31d b(p_c[0] + t.north_m, p_c[1] + t.east_m, p_c[2] + t.down_m);
-
-    Matx31d x = A.solve(b, DECOMP_SVD);
-
-    return Vec3d(x.val);
-}
-
-Vec6d calculateParabola(const vector<Vec3d>& points, const vector<nanoseconds>& timestamps)
-{
-    // Find the parameters of a parabola from a series of points in World frame
-    assert(points.size() == timestamps.size());
-
-    int n = points.size();
-
-    vector<double> A_data(n * 3 * 6, 0.0);
-    vector<double> b_data(n * 3);
-    for (int i = 0; i < n; ++i) {
-        double s = 1e-9 * timestamps[i].count(); // time in second
-
-        int A_start         = i * 3 * 6;
-        A_data[A_start + 0] = A_data[A_start + 7] = A_data[A_start + 14] = s;
-        A_data[A_start + 3] = A_data[A_start + 10] = A_data[A_start + 17] = 1;
-
-        int b_start         = i * 3;
-        b_data[b_start + 0] = points[i][0];
-        b_data[b_start + 1] = points[i][1];
-        b_data[b_start + 2] = points[i][2] - G_HALF * s * s;
-    }
-
-    Mat A = Mat(A_data).reshape(1, n * 3);
-    Mat b = Mat(b_data);
-    Mat x = Mat(6, 1, CV_64F);
-
-    solve(A, b, x, DECOMP_SVD);
-
-    Vec6d parabola((double*)x.data);
-
-    return parabola;
-}
-
-Offboard::PositionNEDYaw calculateDestination(const Vec6d& parabola, double catch_alt)
-{
-    // catch altitude should be negated in NED frame
-    catch_alt = -catch_alt;
-
-    double vx = parabola[0]; // x speed, assuming unchanged
-    double vy = parabola[1]; // y speed, assuming unchanged
-    double vz = parabola[2]; // initial z speed
-    double x0 = parabola[3]; // initial x position
-    double y0 = parabola[4]; // initial y position
-    double z0 = parabola[5]; // initial z position
-
-    // Solve a quadratic equation
-    double a = G_HALF;
-    double b = vz;
-    double c = z0 - catch_alt;
-
-    double delta = b * b - 4 * a * c;
-    if (delta <= 0) {
-        cerr << CLI_COLOR_RED << "How could the delta be <= 0???" << CLI_COLOR_NORMAL << endl;
-        exit(-1);
-    }
-
-    double root1 = (-b + sqrt(delta)) / (2 * a);
-    double root2 = (-b - sqrt(delta)) / (2 * a);
-
-    double t = root1 > root2 ? root1 : root2;
-
-    double catch_x = vx * t + x0;
-    double catch_y = vy * t + y0;
-
-    return {(float)catch_x, (float)catch_y, (float)catch_alt, 0};
-}
+using namespace std::chrono;
+using namespace std::this_thread;
 
 int main(int argc, char* argv[])
 {
@@ -225,7 +27,7 @@ int main(int argc, char* argv[])
     options.add_options()
         ("h,help", "Print help message")
         ("v,video", "Use a video file instead of the camera for testing", cxxopts::value<string>())
-        ("n,n-frames","Maximum number of frames used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("60"))
+        ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("30"))
         ("r,resolution","Camera resolution. One of 's': 640x480; 'm': 1296x972; 'l': 2592x1944",cxxopts::value<char>()->default_value("s"))
         ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<double>()->default_value("3"))
         ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<double>()->default_value("3"))
@@ -237,7 +39,7 @@ int main(int argc, char* argv[])
     auto args = options.parse(argc, argv);
 
     auto video_file   = args.count("video") ? args["video"].as<string>() : "";
-    auto n_frames     = args["n-frames"].as<int>();
+    auto n_records    = args["n-records"].as<int>();
     auto res_char     = args["resolution"].as<char>();
     auto catch_alt    = args["catch-alt"].as<double>();
     auto takeoff_alt  = args["takeoff-alt"].as<double>();
@@ -249,8 +51,8 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    if (n_frames < 15) {
-        cerr << CLI_COLOR_RED << "Invalid n-frames `" << n_frames << "`. Must be at least 15" << CLI_COLOR_NORMAL
+    if (n_records < 15) {
+        cerr << CLI_COLOR_RED << "Invalid n-records `" << n_records << "`. Must be at least 15" << CLI_COLOR_NORMAL
              << endl;
         exit(-1);
     }
@@ -291,18 +93,21 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    // Test VideoCapture
-    Mat first_frame;
-    if (!v.read(first_frame)) {
-        cerr << CLI_COLOR_RED << "Cannot read frame" << CLI_COLOR_NORMAL << endl;
+    Mat im;
+    if (!v.read(im)) {
+        cerr << "Cannot read frame" << endl;
         exit(-1);
+    }
+    if (!video_file.empty()) {
+        cout << "Ignoring camera resolution setting when using a video" << endl;
+        resolution = {im.cols, im.rows};
     }
 
 #ifdef USE_DRONE
     // Prepare Drone
     Mavsdk mav;
     auto connection_result = mav.add_any_connection(connection);
-    checkConnectionResult(connection_result, "Connection failed: ");
+    check_connection_result(connection_result, "Connection failed: ");
 
     // Wait for system to connect via heartbeat
     while (!mav.is_connected()) {
@@ -335,100 +140,184 @@ int main(int argc, char* argv[])
 
     // Arm system
     Action::Result arm_result = action.arm();
-    checkActionResult(arm_result, "Arm failed: ");
+    check_action_result(arm_result, "Arm failed: ");
     cout << "Armed" << endl;
 
     // System Takeoff!!!
     cout << "Using takeoff altitude: " << takeoff_alt << "m" << endl;
     action.set_takeoff_altitude(takeoff_alt);
     Action::Result takeoff_result = action.takeoff();
-    checkActionResult(takeoff_result, "Takeoff failed: ");
+    check_action_result(takeoff_result, "Takeoff failed: ");
     sleep_for(seconds(5));
 #endif // USE_DRONE
 
+    // Tracking
     steady_clock::time_point t0 = steady_clock::now();
 
-    while (true) {
-        auto result = getBallInImage(v);
+    // Begin tracking when the ball appeared in 3 continuous frames
+    // End tracking when the ball disappeared in 3 continuous frames, or after timeout, or when reached n-records
+    TrackingStatus tracking_status = BeforeTracking;
 
-        if (result.has_value()) {
-            cout << "Found ball in image" << endl;
+    // Negative means number of continuous frames without a ball
+    // Positive means number of continuous frames with a ball
+    int tracking_counter = 0;
+
+    // Record ball position, radius, timestamp, drone position, rotation here
+    list<TrackingRecord> tracking_records;
+
+    // Color range for the orange ball
+    const Scalar lower_orange_1 = {0, 28, 0};
+    const Scalar upper_orange_1 = {60, 255, 255};
+
+    const Scalar lower_orange_2 = {108, 28, 0};
+    const Scalar upper_orange_2 = {180, 255, 255};
+
+    Mat im_hsv;
+    Mat im_bin_1;
+    Mat im_bin_2;
+
+    // Ball position, radius in image
+    double xi = -1;
+    double yi = -1;
+    double ri = -1;
+
+    // Assume 30 FPS, tracking timeout in 15 seconds
+    for (int i = 0; i < 30 * 15; ++i) {
+        if (tracking_status == AfterTracking)
             break;
-        } else if (!args.count("video")) {
-            // Print this message only when using a camera
-            cout << CLI_COLOR_YELLOW << "Waiting for ball to appear in image" << CLI_COLOR_NORMAL << endl;
-            sleep_for(milliseconds(100));
-        }
-    }
 
-    // Get everything we need to calculate the parabola
-    cout << "Tracking ball position within " << n_frames << " frames" << endl;
-    vector<Vec2d> positions_i;
-    vector<double> radii_i;
-
-    vector<Vec3d> circles_i;
-    vector<nanoseconds> timestamps;
-    vector<Telemetry::PositionNED> drone_positions;
-    vector<Telemetry::EulerAngle> drone_rotations;
-
-    for (int i = 0; i < n_frames; ++i) {
-        auto result = getBallInImage(v);
-
-        if (result.has_value()) {
+        TrackingRecord new_record{
+            // Use real time only when not using a video. Otherwise use timeline of a 30 FPS video
+            .timestamp = duration_cast<nanoseconds>(
+                video_file.empty() ? steady_clock::now() - t0 : nanoseconds((int)(1e9 / 30 * (i + 1)))),
 #ifdef USE_DRONE
-            drone_positions.push_back(telemetry.position_velocity_ned().position);
-            drone_rotations.push_back(telemetry.attitude_euler_angle());
+            .drone_position = telemetry.position_velocity_ned().position,
+            .drone_rotation = telemetry.attitude_euler_angle(),
 #else
-            drone_positions.push_back({0, 0, (float)takeoff_alt});
-            drone_rotations.push_back({0, 0, 0});
+            .drone_position = {0, 0, (float)takeoff_alt},
+            .drone_rotation = {0, 0, 0},
 #endif // USE_DRONE
-            auto values = result.value();
-            positions_i.push_back(get<0>(values));
-            radii_i.push_back(get<1>(values));
+        };
 
-            if (args.count("video")) {
-                timestamps.emplace_back((int)(1e9 / 30 * (i + 1))); // assume a 30FPS video
-            } else {
-                timestamps.push_back(duration_cast<nanoseconds>(get<2>(values) - t0));
-            }
+        if (!v.read(im)) {
+            cerr << "Cannot read frame or end of video" << endl;
+            break;
         }
+
+        // Convert to HSV colo space
+        cvtColor(im, im_hsv, COLOR_BGR2HSV);
+
+        // Filter color within range
+        inRange(im_hsv, lower_orange_1, upper_orange_1, im_bin_1);
+        inRange(im_hsv, lower_orange_2, upper_orange_2, im_bin_2);
+
+        // Combine two color ranges
+        bitwise_or(im_bin_1, im_bin_2, im_bin_1);
+
+        // Find contours
+        vector<vector<Point2i>> contours;
+        vector<Vec4i> hierarchy;
+        findContours(im_bin_1, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+
+        if (!contours.empty()) {
+            // Find largest contour by area
+            sort(contours.begin(), contours.end(), [](const vector<Point2i>& c1, const vector<Point2i>& c2) {
+                return contourArea(c1, false) > contourArea(c2, false);
+            });
+
+            auto largestContour = contours[0];
+
+            auto m = moments(largestContour);
+
+            double area = m.m00;
+
+            // Use time average or not
+            if (use_time_avg) {
+                xi = xi < 0 ? (m.m10 / area) : (0.8 * xi + 0.2 * m.m10 / area);
+                yi = yi < 0 ? (m.m01 / area) : (0.8 * yi + 0.2 * m.m01 / area);
+                ri = ri < 0 ? sqrt(area / CV_PI) : (0.8 * ri + 0.2 * sqrt(area / CV_PI));
+            } else {
+                xi = m.m10 / area;
+                yi = m.m01 / area;
+                ri = sqrt(area / CV_PI);
+            }
+
+            if (ri > 6) {
+                // Count as a ball if the blob has a large enough radius
+                tracking_counter = tracking_counter <= 0 ? 1 : tracking_counter + 1;
+
+                new_record.xi = xi;
+                new_record.yi = yi;
+                new_record.ri = ri;
+                tracking_records.push_back(new_record);
+            } else {
+                // Otherwise the blob is just noise
+                tracking_counter = tracking_counter >= 0 ? -1 : tracking_counter - 1;
+            }
+        } else {
+            // No ball in this frame
+            tracking_counter = tracking_counter >= 0 ? -1 : tracking_counter - 1;
+        }
+
+        // Examine tracking status
+        if (tracking_status == BeforeTracking && tracking_counter < 0)
+            tracking_records.clear();
+
+        if (tracking_status == BeforeTracking && tracking_counter >= 3)
+            tracking_status = DuringTracking;
+
+        if (tracking_status == DuringTracking && tracking_counter <= -3)
+            tracking_status = AfterTracking;
+
+        if (tracking_status == DuringTracking && tracking_records.size() >= n_records)
+            tracking_status = AfterTracking;
     }
 
+    // End of tracking
     v.release();
+    im.release();
+    im_hsv.release();
+    im_bin_1.release();
+    im_bin_2.release();
 
-    cout << "Positions acquired in " << positions_i.size() << " frames" << endl;
-    cout << "Total interval: " << duration_cast<milliseconds>(timestamps[timestamps.size() - 1] - timestamps[0]).count()
+    // Drop the first and last records as they are in accurate
+    tracking_records.pop_front();
+    tracking_records.pop_back();
+
+    cout << "Positions acquired in " << tracking_records.size() << " frames" << endl;
+    cout << "Total interval: "
+         << duration_cast<milliseconds>(tracking_records.back().timestamp - tracking_records.front().timestamp).count()
          << "ms" << endl;
 
-    // A series of coordinate transforms
-    vector<Vec3d> positions_c;
-    if (args.count("video")) {
-        cout << "Ignoring camera resolution setting when using a video" << endl;
-        for (int i = 0; i < positions_i.size(); ++i) {
-            positions_c.push_back(cameraTransform(positions_i[i], radii_i[i], {first_frame.cols, first_frame.rows}));
-        }
-    } else {
-        for (int i = 0; i < positions_i.size(); ++i) {
-            positions_c.push_back(cameraTransform(positions_i[i], radii_i[i], resolution));
-        }
+    // Transform Image frame -> Camera frame
+    for (auto& record : tracking_records) {
+        record.position_c = invert_camera_transform(record.xi, record.yi, record.ri, resolution);
     }
 
     cout << "Got following positions in Camera frame:" << endl;
-    for (const auto& p : positions_c) {
-        cout << "\t" << p << "," << endl;
+    for (const auto& record : tracking_records) {
+        cout << "\t" << record.position_c << "," << endl;
     }
 
-    vector<Vec3d> positions_w;
-    for (int i = 0; i < positions_c.size(); ++i) {
-        positions_w.push_back(worldTransform(positions_c[i], drone_positions[i], drone_rotations[i]));
+    // Transform Camera frame -> World frame
+    for (auto& record : tracking_records) {
+        record.position_w = invert_world_transform(record.position_c, record.drone_position, record.drone_rotation);
     }
 
     cout << "Got following positions in World frame:" << endl;
-    for (const auto& p : positions_w) {
-        cout << "\t" << p << "," << endl;
+    for (const auto& record : tracking_records) {
+        cout << "\t" << record.position_w << "," << endl;
     }
 
-    auto parabola = calculateParabola(positions_w, timestamps);
+    // From World coordinates to parabola
+    vector<Vec3d> positions_w;
+    vector<nanoseconds> timestamps;
+    for (const auto& record : tracking_records) {
+        positions_w.push_back(record.position_w);
+        timestamps.push_back(record.timestamp);
+    }
+
+    auto parabola = calculate_parabola(positions_w, timestamps);
     cout << "Got parabola parameters: " << parabola << endl;
 
 #ifdef USE_DRONE
@@ -437,12 +326,19 @@ int main(int argc, char* argv[])
     }
 #endif
 
-    auto destination = calculateDestination(parabola, catch_alt);
+    Offboard::PositionNEDYaw destination{};
+    try {
+        destination = calculate_destination(parabola, catch_alt);
+    } catch (const runtime_error& e) {
+        cout << CLI_COLOR_RED << e.what() << CLI_COLOR_NORMAL << endl;
+        exit_and_land(action, telemetry);
+    }
+
     cout << CLI_COLOR_GREEN << "Destination is at " << destination << CLI_COLOR_NORMAL << endl;
 
     if (abs(destination.north_m) > 10 || abs(destination.east_m) > 10) {
         cout << CLI_COLOR_RED << "Destination too far. Aborting for safety" << CLI_COLOR_NORMAL << endl;
-        exit(0);
+        exit_and_land(action, telemetry);
     }
 
 #ifdef USE_DRONE
@@ -450,22 +346,23 @@ int main(int argc, char* argv[])
     offboard.set_position_ned(destination);
 
     Offboard::Result offboard_result = offboard.start();
-    checkOffboardResult(offboard_result, "Offboard start failed: ");
+    check_offboard_result(offboard_result, "Offboard start failed: ");
     cout << "Offboard started" << endl;
 
-    sleep_for(seconds(10));
+    sleep_for(seconds(5));
 
     offboard_result = offboard.stop();
-    checkOffboardResult(offboard_result, "Offboard stop failed: ");
+    check_offboard_result(offboard_result, "Offboard stop failed: ");
     cout << "Offboard stopped" << endl;
 
     // Return the vehicle to home location
     const float rtl_altitude = 5.0f;
     cout << "Using RTL altitude " << rtl_altitude << "m" << endl;
-    action.set_return_to_launch_return_altitude(rtl_altitude);
+    auto set_rtl_alt_result = action.set_return_to_launch_return_altitude(rtl_altitude);
+    check_action_result(set_rtl_alt_result, "Set RTL altitude failed: ");
 
     const Action::Result rtl_result = action.return_to_launch();
-    checkActionResult(rtl_result, "Return to launch failed: ");
+    check_action_result(rtl_result, "Return to launch failed: ");
 
     // Check if vehicle is still in air
     while (telemetry.in_air()) {

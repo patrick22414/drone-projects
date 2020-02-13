@@ -12,7 +12,7 @@ include_directories(include)
 # Build without USE_DRONE if a drone or simulator is not available
 add_compile_definitions(USE_DRONE)
 
-add_executable(catch src/main.cpp)
+add_executable(catch src/main.cpp src/transforms.cpp src/common.cpp)
 
 target_link_libraries(catch
         ${OpenCV_LIBS}
