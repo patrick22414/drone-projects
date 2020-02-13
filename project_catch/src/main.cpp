@@ -229,18 +229,20 @@ int main(int argc, char* argv[])
         ("r,resolution","Camera resolution. One of 's': 640x480; 'm': 1296x972; 'l': 2592x1944",cxxopts::value<char>()->default_value("s"))
         ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<double>()->default_value("3"))
         ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<double>()->default_value("3"))
+        ("g,time-avg", "Enabling time average for tracking", cxxopts::value<bool>()->default_value("false"))
         ("connection", "MAVSDK connection url", cxxopts::value<string>()->default_value("serial:///dev/serial0:921600"));
     options.parse_positional({"connection"});
     // clang-format on
 
     auto args = options.parse(argc, argv);
 
-    auto video_file  = args.count("video") ? args["video"].as<string>() : "";
-    auto n_frames    = args["n-frames"].as<int>();
-    auto res_char    = args["resolution"].as<char>();
-    auto catch_alt   = args["catch-alt"].as<double>();
-    auto takeoff_alt = args["takeoff-alt"].as<double>();
-    auto connection  = args["connection"].as<string>();
+    auto video_file   = args.count("video") ? args["video"].as<string>() : "";
+    auto n_frames     = args["n-frames"].as<int>();
+    auto res_char     = args["resolution"].as<char>();
+    auto catch_alt    = args["catch-alt"].as<double>();
+    auto takeoff_alt  = args["takeoff-alt"].as<double>();
+    auto use_time_avg = args["time-avg"].as<bool>();
+    auto connection   = args["connection"].as<string>();
 
     if (args.count("help")) {
         cout << options.help() << endl;
@@ -363,9 +365,12 @@ int main(int argc, char* argv[])
     cout << "Tracking ball position within " << n_frames << " frames" << endl;
     vector<Vec2d> positions_i;
     vector<double> radii_i;
+
+    vector<Vec3d> circles_i;
     vector<nanoseconds> timestamps;
     vector<Telemetry::PositionNED> drone_positions;
     vector<Telemetry::EulerAngle> drone_rotations;
+
     for (int i = 0; i < n_frames; ++i) {
         auto result = getBallInImage(v);
 
@@ -382,7 +387,7 @@ int main(int argc, char* argv[])
             radii_i.push_back(get<1>(values));
 
             if (args.count("video")) {
-                timestamps.emplace_back((int)1e9 / 30 * (i + 1)); // assume a 30FPS video
+                timestamps.emplace_back((int)(1e9 / 30 * (i + 1))); // assume a 30FPS video
             } else {
                 timestamps.push_back(duration_cast<nanoseconds>(get<2>(values) - t0));
             }
