@@ -166,13 +166,28 @@ Offboard::PositionNEDYaw calculate_destination_2(const Vec6d& parabola, double c
     double p1 = parabola[4];
     double p2 = parabola[5];
 
+    Mat R = Mat_<double>({-b, 0, a, a, 0, b, 0, 1, 0}).reshape(3);
+
+    double x0 = -c / a / 2;
+    double y0 = -c / b / 2;
+
     // This is the catch altitude in V coordinates
     double v = -catch_alt;
 
     // Solve v = p0 + p1 * u + p2 * u^2
     auto result = solve_quadratic(p2, p1, p0 - v);
 
-    Mat R = Mat_<double>({-b, 0, a, a, 0, b, 0, 1, 0}).reshape(3);
+    if (!result.first.has_value())
+        throw runtime_error("Delta < 0. Cannot find destination");
+    else {
+        double u = result.first.value();
+
+        Vec3d uvw = {u - x0, v - y0, 0};
+        Vec3d xyz;
+        solve(R, uvw, xyz);
+
+        return {static_cast<float>(xyz[0]), static_cast<float>(xyz[1]), static_cast<float>(xyz[2]), 0};
+    }
 }
 
 Offboard::PositionNEDYaw calculate_destination(const Vec6d& parabola, double catch_alt)
