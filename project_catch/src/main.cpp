@@ -355,18 +355,13 @@ int main(int argc, char* argv[])
     check_offboard_result(offboard_result, "Offboard stop failed: ");
     cout << "Offboard stopped" << endl;
 
-    // Return the vehicle to home location
-    const float rtl_altitude = 5.0f;
-    cout << "Using RTL altitude " << rtl_altitude << "m" << endl;
-    auto set_rtl_alt_result = action.set_return_to_launch_return_altitude(rtl_altitude);
-    check_action_result(set_rtl_alt_result, "Set RTL altitude failed: ");
-
-    const Action::Result rtl_result = action.return_to_launch();
-    check_action_result(rtl_result, "Return to launch failed: ");
+    // Land the vehicle
+    const Action::Result land_result = action.land();
+    check_action_result(land_result, "Landing failed: ");
 
     // Check if vehicle is still in air
     while (telemetry.in_air()) {
-        cout << CLI_COLOR_YELLOW << "Vehicle is returning..." << CLI_COLOR_NORMAL << endl;
+        cout << CLI_COLOR_YELLOW << "Vehicle is Landing..." << CLI_COLOR_NORMAL << endl;
         sleep_for(seconds(2));
     }
 

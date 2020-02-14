@@ -4,7 +4,7 @@
 // Given a point in the Image frame, transform the position into the Camera frame
 Vec3d invert_camera_transform(double ball_x_px, double ball_y_px, double ball_radius_px, const Vec2i& resolution)
 {
-    const double ball_radius = 3.3e-2; // tennis ball radius 3.3 cm
+    const double ball_radius = 1e-2 * 2.5 * 2.54; // tiny basketball radius 2.5 inches
 
     // Pi Camera V1 parameters
     const double sensor_w_px     = 2592;   // sensor width in pixels
@@ -63,10 +63,9 @@ Vec3d invert_world_transform(const Vec3d& p_c, const Telemetry::PositionNED& t, 
 
     // Total extrinsic rotation
     Matx33d A = drone_attitude_rotation * camera_mounting_rotation;
-    //    Matx33d A = drone_attitude_rotation;
 
-    //
-    Matx31d b(p_c[0] + t.north_m, p_c[1] + t.east_m, p_c[2] + t.down_m);
+    // Camera frame coordinates minus transformation T
+    Matx31d b(p_c[0] - t.north_m, p_c[1] - t.east_m, p_c[2] - t.down_m);
 
     Matx31d x = A.solve(b, DECOMP_SVD);
 
