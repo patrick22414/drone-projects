@@ -54,3 +54,16 @@ Matx33d euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea)
 
     return mz * my * mx;
 }
+
+pair<optional<double>, optional<double>> solve_quadratic(double a, double b, double c)
+{
+    double delta = b * b - 4 * a * c;
+
+    if (delta > 0) {
+        return {(-b + sqrt(delta)) / a / 2, (-b - sqrt(delta)) / a / 2};
+    } else if (delta == 0) {
+        return {-b / a / 2, {}};
+    }
+
+    return {{}, {}};
+}

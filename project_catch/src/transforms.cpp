@@ -57,7 +57,6 @@ Vec3d invert_camera_transform(double ball_x_px, double ball_y_px, double ball_ra
 // Given a point in the Camera frame, transform the position into the World frame
 Vec3d invert_world_transform(const Vec3d& p_c, const Telemetry::PositionNED& t, const Telemetry::EulerAngle& r)
 {
-
     Matx33d drone_attitude_rotation  = euler_angle_to_rotation_matrix(r);
     Matx33d camera_mounting_rotation = euler_angle_to_rotation_matrix({0, 180, 90 + 20});
 
@@ -70,6 +69,58 @@ Vec3d invert_world_transform(const Vec3d& p_c, const Telemetry::PositionNED& t, 
     Matx31d x = A.solve(b, DECOMP_SVD);
 
     return Vec3d(x.val);
+}
+
+Vec6d calculate_parabola_2(const vector<Vec3d>& points)
+{
+    int N = points.size();
+
+    Mat xyz(N, 3, CV_64F);
+    for (int i = 0; i < N; ++i) {
+        xyz.row(i) = points[i];
+    }
+
+    // Fit to a plane ax + by + c = 0
+    Mat A1 = xyz.clone();
+
+    A1.col(2) = 1;
+
+    Vec3d X1;
+    solve(A1, Mat::zeros(N, 1, CV_64F), X1, DECOMP_SVD);
+
+    // Normal vector of the plane
+    X1 = X1 / sqrt(X1[0] * X1[0] + X1[1] * X1[1]);
+
+    double a = X1[0];
+    double b = X1[1];
+    double c = X1[2];
+
+    double x0 = -c / a / 2;
+    double y0 = -c / b / 2;
+
+    Mat R = Mat_<double>({-b, 0, a, a, 0, b, 0, 1, 0}).reshape(3);
+
+    Mat uvw = xyz * R.t();
+    uvw.col(0) += x0;
+    uvw.col(1) += y0;
+
+    Mat col_u = uvw.col(0);
+    Mat col_v = uvw.col(1);
+
+    // Fit to parabola on the u-v plane: v = p0 + p1 * u + p2 * u^2
+    Mat A2(N, 3, CV_64F);
+    A2.col(0) = 1;
+    A2.col(1) = col_u;
+    A2.col(2) = col_u.mul(col_u);
+
+    Vec3d X2;
+    solve(A2, col_v, X2, DECOMP_SVD);
+
+    double p0 = X2[0];
+    double p1 = X2[1];
+    double p2 = X2[2];
+
+    return {a, b, c, p0, p1, p2};
 }
 
 Vec6d calculate_parabola(const vector<Vec3d>& points, const vector<nanoseconds>& timestamps)
@@ -103,6 +154,25 @@ Vec6d calculate_parabola(const vector<Vec3d>& points, const vector<nanoseconds>&
     Vec6d parabola((double*)x.data);
 
     return parabola;
+}
+
+Offboard::PositionNEDYaw calculate_destination_2(const Vec6d& parabola, double catch_alt)
+{
+    // TODO
+    double a  = parabola[0];
+    double b  = parabola[1];
+    double c  = parabola[2];
+    double p0 = parabola[3];
+    double p1 = parabola[4];
+    double p2 = parabola[5];
+
+    // This is the catch altitude in V coordinates
+    double v = -catch_alt;
+
+    // Solve v = p0 + p1 * u + p2 * u^2
+    auto result = solve_quadratic(p2, p1, p0 - v);
+
+    Mat R = Mat_<double>({-b, 0, a, a, 0, b, 0, 1, 0}).reshape(3);
 }
 
 Offboard::PositionNEDYaw calculate_destination(const Vec6d& parabola, double catch_alt)

@@ -55,4 +55,6 @@ void exit_and_land(const Action& action, const Telemetry& telemetry);
 
 Matx33d euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea);
 
+pair<optional<double>, optional<double>> solve_quadratic(double a, double b, double c);
+
 #endif // CATCH_COMMON_H
