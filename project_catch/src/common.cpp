@@ -40,24 +40,24 @@ void exit_and_land(const Action& action, const Telemetry& telemetry)
     cout << "Landed!" << endl;
 }
 
-Matx33d euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea)
+Matx33f euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea)
 {
-    double a = ea.roll_deg / 180 * CV_PI;
-    double b = ea.pitch_deg / 180 * CV_PI;
-    double c = ea.yaw_deg / 180 * CV_PI;
+    float a = ea.roll_deg / 180 * (float) CV_PI;
+    float b = ea.pitch_deg / 180 * (float) CV_PI;
+    float c = ea.yaw_deg / 180 * (float) CV_PI;
 
-    Matx33d mx(1, 0, 0, 0, cos(a), -sin(a), 0, sin(a), cos(a));
+    Matx33f mx(1, 0, 0, 0, cos(a), -sin(a), 0, sin(a), cos(a));
 
-    Matx33d my(cos(b), 0, sin(b), 0, 1, 0, -sin(b), 0, cos(b));
+    Matx33f my(cos(b), 0, sin(b), 0, 1, 0, -sin(b), 0, cos(b));
 
-    Matx33d mz(cos(c), -sin(c), 0, sin(c), cos(c), 0, 0, 0, 1);
+    Matx33f mz(cos(c), -sin(c), 0, sin(c), cos(c), 0, 0, 0, 1);
 
     return mz * my * mx;
 }
 
-pair<optional<double>, optional<double>> solve_quadratic(double a, double b, double c)
+pair<optional<float>, optional<float>> solve_quadratic(float a, float b, float c)
 {
-    double delta = b * b - 4 * a * c;
+    float delta = b * b - 4 * a * c;
 
     if (delta > 0) {
         return {(-b + sqrt(delta)) / a / 2, (-b - sqrt(delta)) / a / 2};

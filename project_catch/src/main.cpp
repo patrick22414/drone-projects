@@ -29,22 +29,20 @@ int main(int argc, char* argv[])
         ("v,video", "Use a video file instead of the camera for testing", cxxopts::value<string>())
         ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("30"))
         ("r,resolution","Camera resolution. One of 's': 640x480; 'm': 1296x972; 'l': 2592x1944",cxxopts::value<char>()->default_value("s"))
-        ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<double>()->default_value("3"))
-        ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<double>()->default_value("3"))
-        ("g,time-avg", "Enabling time average for tracking", cxxopts::value<bool>()->default_value("false"))
+        ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<float>()->default_value("3"))
+        ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<float>()->default_value("3"))
         ("connection", "MAVSDK connection url", cxxopts::value<string>()->default_value("serial:///dev/serial0:921600"));
     options.parse_positional({"connection"});
     // clang-format on
 
     auto args = options.parse(argc, argv);
 
-    auto video_file   = args.count("video") ? args["video"].as<string>() : "";
-    auto n_records    = args["n-records"].as<int>();
-    auto res_char     = args["resolution"].as<char>();
-    auto catch_alt    = args["catch-alt"].as<double>();
-    auto takeoff_alt  = args["takeoff-alt"].as<double>();
-    auto use_time_avg = args["time-avg"].as<bool>();
-    auto connection   = args["connection"].as<string>();
+    auto video_file  = args.count("video") ? args["video"].as<string>() : "";
+    auto n_records   = args["n-records"].as<int>();
+    auto res_char    = args["resolution"].as<char>();
+    auto catch_alt   = args["catch-alt"].as<float>();
+    auto takeoff_alt = args["takeoff-alt"].as<float>();
+    auto connection  = args["connection"].as<string>();
 
     if (args.count("help")) {
         cout << options.help() << endl;
@@ -152,7 +150,6 @@ int main(int argc, char* argv[])
 #endif // USE_DRONE
 
     // Tracking
-    steady_clock::time_point t0 = steady_clock::now();
 
     // Begin tracking when the ball appeared in 3 continuous frames
     // End tracking when the ball disappeared in 3 continuous frames, or after timeout, or when reached n-records
@@ -176,10 +173,10 @@ int main(int argc, char* argv[])
     Mat im_bin_1;
     Mat im_bin_2;
 
-    // Ball position, radius in image
-    double xi = -1;
-    double yi = -1;
-    double ri = -1;
+    // Ball position and radius in image in pixels
+    float xi;
+    float yi;
+    float ri;
 
     // Assume 30 FPS, tracking timeout in 15 seconds
     for (int i = 0; i < 30 * 15; ++i) {
@@ -187,14 +184,11 @@ int main(int argc, char* argv[])
             break;
 
         TrackingRecord new_record{
-            // Use real time only when not using a video. Otherwise use timeline of a 30 FPS video
-            .timestamp = duration_cast<nanoseconds>(
-                video_file.empty() ? steady_clock::now() - t0 : nanoseconds((int)(1e9 / 30 * (i + 1)))),
 #ifdef USE_DRONE
             .drone_position = telemetry.position_velocity_ned().position,
             .drone_rotation = telemetry.attitude_euler_angle(),
 #else
-            .drone_position = {0, 0, (float)takeoff_alt},
+            .drone_position = {0, 0, takeoff_alt},
             .drone_rotation = {0, 0, 0},
 #endif // USE_DRONE
         };
@@ -226,21 +220,12 @@ int main(int argc, char* argv[])
             });
 
             auto largestContour = contours[0];
+            auto m              = moments(largestContour);
+            auto area           = (float) m.m00;
 
-            auto m = moments(largestContour);
-
-            double area = m.m00;
-
-            // Use time average or not
-            if (use_time_avg) {
-                xi = xi < 0 ? (m.m10 / area) : (0.8 * xi + 0.2 * m.m10 / area);
-                yi = yi < 0 ? (m.m01 / area) : (0.8 * yi + 0.2 * m.m01 / area);
-                ri = ri < 0 ? sqrt(area / CV_PI) : (0.8 * ri + 0.2 * sqrt(area / CV_PI));
-            } else {
-                xi = m.m10 / area;
-                yi = m.m01 / area;
-                ri = sqrt(area / CV_PI);
-            }
+            xi = (float) m.m10 / area;
+            yi = (float) m.m01 / area;
+            ri = (float) sqrt(area / CV_PI);
 
             if (ri > 6) {
                 // Count as a ball if the blob has a large enough radius
@@ -285,9 +270,6 @@ int main(int argc, char* argv[])
     tracking_records.pop_back();
 
     cout << "Positions acquired in " << tracking_records.size() << " frames" << endl;
-    cout << "Total interval: "
-         << duration_cast<milliseconds>(tracking_records.back().timestamp - tracking_records.front().timestamp).count()
-         << "ms" << endl;
 
     // Transform Image frame -> Camera frame
     for (auto& record : tracking_records) {
@@ -310,25 +292,22 @@ int main(int argc, char* argv[])
     }
 
     // From World coordinates to parabola
-    vector<Vec3d> positions_w;
-    vector<nanoseconds> timestamps;
+    vector<Vec3f> positions_w;
     for (const auto& record : tracking_records) {
         positions_w.push_back(record.position_w);
-        timestamps.push_back(record.timestamp);
     }
 
-    auto parabola = calculate_parabola(positions_w, timestamps);
-    cout << "Got parabola parameters: " << parabola << endl;
-
-#ifdef USE_DRONE
     if (catch_alt < 3) {
+#ifdef USE_DRONE
         catch_alt = telemetry.position().relative_altitude_m;
-    }
+#else
+        catch_alt = 3;
 #endif
+    }
 
     Offboard::PositionNEDYaw destination{};
     try {
-        destination = calculate_destination(parabola, catch_alt);
+        destination = calculate_destination_2(positions_w, catch_alt);
     } catch (const runtime_error& e) {
         cout << CLI_COLOR_RED << e.what() << CLI_COLOR_NORMAL << endl;
         exit_and_land(action, telemetry);
@@ -349,7 +328,7 @@ int main(int argc, char* argv[])
     check_offboard_result(offboard_result, "Offboard start failed: ");
     cout << "Offboard started" << endl;
 
-    sleep_for(seconds(5));
+    sleep_for(seconds(10));
 
     offboard_result = offboard.stop();
     check_offboard_result(offboard_result, "Offboard stop failed: ");

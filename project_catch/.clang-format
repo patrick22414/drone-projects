@@ -58,7 +58,7 @@ PointerAlignment: Left
 ReflowComments: true
 SortIncludes: false
 SortUsingDeclarations: false
-SpaceAfterCStyleCast: false
+SpaceAfterCStyleCast: true
 SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
 SpaceBeforeCtorInitializerColon: true

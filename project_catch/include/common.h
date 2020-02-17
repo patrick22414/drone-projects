@@ -32,17 +32,15 @@ enum TrackingStatus {
 };
 
 struct TrackingRecord {
-    double xi;
-    double yi;
-    double ri;
-
-    nanoseconds timestamp;
+    float xi;
+    float yi;
+    float ri;
 
     Telemetry::PositionNED drone_position;
     Telemetry::EulerAngle drone_rotation;
 
-    Vec3d position_c;
-    Vec3d position_w;
+    Vec3f position_c;
+    Vec3f position_w;
 };
 
 void check_action_result(Action::Result result, const string& fail_message);
@@ -53,8 +51,8 @@ void check_connection_result(ConnectionResult result, const string& fail_message
 
 void exit_and_land(const Action& action, const Telemetry& telemetry);
 
-Matx33d euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea);
+Matx33f euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea);
 
-pair<optional<double>, optional<double>> solve_quadratic(double a, double b, double c);
+pair<optional<float>, optional<float>> solve_quadratic(float a, float b, float c);
 
 #endif // CATCH_COMMON_H
