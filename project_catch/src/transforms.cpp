@@ -111,8 +111,8 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     Matx31f T(x0, y0, 0);
 
     Mat UVW = R * XYZ + T;
-    UVW.col(0) += x0;
-    UVW.col(1) += y0;
+    // UVW.col(0) += x0;
+    // UVW.col(1) += y0;
 
     Mat col_u = UVW.col(0);
     Mat col_v = UVW.col(1);
@@ -146,6 +146,7 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     else {
         float u1 = roots.first.value();
 
+        // xyz = R^-1 * (uvw - T)
         Vec3f uvw1 = {u1 - x0, v - y0, 0};
         Vec3f xyz1;
         solve(R, uvw1, xyz1);

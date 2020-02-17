@@ -302,7 +302,7 @@ int main(int argc, char* argv[])
         catch_alt = telemetry.position().relative_altitude_m;
 #else
         catch_alt = 3;
-#endif
+#endif // USE_DRONE
     }
 
     Offboard::PositionNEDYaw destination{};
@@ -310,14 +310,18 @@ int main(int argc, char* argv[])
         destination = calculate_destination_2(positions_w, catch_alt);
     } catch (const runtime_error& e) {
         cout << CLI_COLOR_RED << e.what() << CLI_COLOR_NORMAL << endl;
+#ifdef USE_DRONE
         exit_and_land(action, telemetry);
+#endif // USE_DRONE
     }
 
     cout << CLI_COLOR_GREEN << "Destination is at " << destination << CLI_COLOR_NORMAL << endl;
 
     if (abs(destination.north_m) > 10 || abs(destination.east_m) > 10) {
         cout << CLI_COLOR_RED << "Destination too far. Aborting for safety" << CLI_COLOR_NORMAL << endl;
+#ifdef USE_DRONE
         exit_and_land(action, telemetry);
+#endif // USE_DRONE
     }
 
 #ifdef USE_DRONE
