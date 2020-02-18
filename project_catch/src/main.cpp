@@ -49,12 +49,6 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    if (n_records < 15) {
-        cerr << CLI_COLOR_RED << "Invalid n-records `" << n_records << "`. Must be at least 15" << CLI_COLOR_NORMAL
-             << endl;
-        exit(-1);
-    }
-
     if (catch_alt < 3 && catch_alt != -1) {
         cerr << CLI_COLOR_RED << "Invalid altitude `" << catch_alt
              << "`. Must be at least 3 meters or -1 (use current altitude)" << CLI_COLOR_NORMAL << endl;
@@ -188,7 +182,7 @@ int main(int argc, char* argv[])
             .drone_position = telemetry.position_velocity_ned().position,
             .drone_rotation = telemetry.attitude_euler_angle(),
 #else
-            .drone_position = {0, 0, takeoff_alt},
+            .drone_position = {0, 0, -takeoff_alt},
             .drone_rotation = {0, 0, 0},
 #endif // USE_DRONE
         };
@@ -312,6 +306,8 @@ int main(int argc, char* argv[])
         cout << CLI_COLOR_RED << e.what() << CLI_COLOR_NORMAL << endl;
 #ifdef USE_DRONE
         exit_and_land(action, telemetry);
+#else
+        exit(-1);
 #endif // USE_DRONE
     }
 
@@ -321,6 +317,8 @@ int main(int argc, char* argv[])
         cout << CLI_COLOR_RED << "Destination too far. Aborting for safety" << CLI_COLOR_NORMAL << endl;
 #ifdef USE_DRONE
         exit_and_land(action, telemetry);
+#else
+        exit(-1);
 #endif // USE_DRONE
     }
 

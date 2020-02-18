@@ -80,60 +80,70 @@ Vec3f invert_world_transform(const Vec3f& p_c, const Telemetry::PositionNED& t, 
 Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, float catch_alt)
 {
     // Find a parabola
+    // The parabola is defined as:
+    // --- [u; v; w] = R * [x; y; z] + T
+    // --- v = p0 + p1 * u + p2 * u^2
+    // --- w = 0
+    //
+    // R and T transforms XYZ into UVW
+    //     where UV is the plane y = ax + b, V axis is the Z axis and W is the normalized normal vector of the plane
+
     int N = points_w.size();
 
     Mat XYZ(3, N, CV_32F);
     for (int i = 0; i < N; ++i) {
-        XYZ.col(i) = points_w[i];
+        Mat(points_w[i], false).copyTo(XYZ.col(i));
     }
 
-    // Fit to a plane ax + by + c = 0
-    Mat A1;
-    transpose(XYZ, A1);
-    A1.col(2) = 1;
+    // Fit to a plane y = ax + b
+    Mat A1 = Mat::ones(N, 2, CV_32F);
 
-    Mat B1 = Mat::zeros(N, 1, CV_32F);
+    A1.col(0) = XYZ.row(0).t();
 
-    Vec3f X1;
-    solve(A1, B1, X1, DECOMP_SVD);
+    Mat B1 = XYZ.row(1).t();
 
-    // Plane normal vector
-    X1 = X1 / sqrt(X1[0] * X1[0] + X1[1] * X1[1]);
+    Vec2f X1;
+    solve(A1, B1, X1, DECOMP_QR);
 
+    cout << "X1 = \n" << X1 << endl;
+
+    // Now X1 = [a, b] for the plane y = ax + b
     float a = X1[0];
     float b = X1[1];
-    float c = X1[2];
 
-    float x0 = -c / a / 2;
-    float y0 = -c / b / 2;
+    // Choose an origin on this plane. Go with [0, b] for simplicity
+    float x0 = 0;
+    float y0 = b;
 
-    Matx33f R(-b, 0, a, a, 0, b, 0, 1, 0);
-    Matx31f T(x0, y0, 0);
+    // Rotation and Transformation matrices
+    float tmp = sqrt(a * a + 1);
+    Matx33f R(1 / tmp, 0, a / tmp, a / tmp, 0, -1 / tmp, 0, 1, 0);
+    Vec3f T(x0, y0, 0);
 
-    Mat UVW = R * XYZ + T;
-    // UVW.col(0) += x0;
-    // UVW.col(1) += y0;
+    Mat UVW = R * XYZ;
+    UVW.row(0) += T[0];
+    UVW.row(1) += T[1];
 
-    Mat col_u = UVW.col(0);
-    Mat col_v = UVW.col(1);
+    cout << "UVW = \n" << format(UVW.t(), Formatter::FMT_NUMPY) << endl;
+
+    Mat row_u = UVW.row(0);
+    Mat row_v = UVW.row(1);
 
     // Fit to a parabola on the u-v plane: v = p0 + p1 * u + p2 * u^2
     Mat A2(N, 3, CV_32F);
     A2.col(0) = 1;
-    A2.col(1) = col_u;
-    A2.col(2) = col_u.mul(col_u);
+    A2.col(1) = row_u.t();
+    A2.col(2) = row_u.mul(row_u).t();
 
     Vec3f X2;
-    solve(A2, col_v, X2, DECOMP_SVD);
+    solve(A2, row_v.t(), X2, DECOMP_QR);
 
     float p0 = X2[0];
     float p1 = X2[1];
     float p2 = X2[2];
 
-    // The parabola is defined as:
-    // --- [u; v; w] = R * [x; y; z] + T
-    // --- v = p0 + p1 * u + p2 * u^2
-    // --- w = 0
+    cout << CLI_COLOR_GREEN << "Got parabola parameters:" << CLI_COLOR_NORMAL << " [" << a << ", " << b << ", " << p0
+         << ", " << p1 << ", " << p2 << "]" << endl;
 
     // This is the catch altitude in V coordinates
     float v = -catch_alt;
@@ -142,12 +152,12 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     auto roots = solve_quadratic(p2, p1, p0 - v);
 
     if (!roots.first.has_value())
-        throw runtime_error("Delta < 0. Cannot find destination");
+        throw runtime_error("Solve quadratic equation failed");
     else {
         float u1 = roots.first.value();
 
         // xyz = R^-1 * (uvw - T)
-        Vec3f uvw1 = {u1 - x0, v - y0, 0};
+        Vec3f uvw1 = Vec3f(u1, v, 0) - T;
         Vec3f xyz1;
         solve(R, uvw1, xyz1);
 
@@ -156,7 +166,7 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
 
         float u2 = roots.second.value();
 
-        Vec3f uvw2 = {u2 - x0, v - y0, 0};
+        Vec3f uvw2 = Vec3f(u2, v, 0) - T;
         Vec3f xyz2;
         solve(R, uvw1, xyz2);
 
