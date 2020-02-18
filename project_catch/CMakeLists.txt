@@ -15,6 +15,7 @@ add_compile_definitions(USE_DRONE)
 add_executable(catch src/main.cpp src/transforms.cpp src/common.cpp)
 
 target_link_libraries(catch
+        stdc++fs
         ${OpenCV_LIBS}
         MAVSDK::mavsdk_action
         MAVSDK::mavsdk_offboard
