@@ -138,6 +138,11 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
 
     Mat UVW1 = M * XYZ1;
 
+    cout << "Got UVW homogeneous coordinates:" << endl;
+    for (int i = 0; i < N; ++i) {
+        cout << "\t" << UVW1.col(i).t() << "," << endl;
+    }
+
     Mat col_u = UVW1.row(0).t();
     Mat col_v = UVW1.row(1).t();
 

@@ -115,6 +115,18 @@ int main(int argc, char* argv[])
     auto offboard  = Offboard(system);
     auto telemetry = Telemetry(system);
 
+    // Subscribe to NED positions
+    telemetry.set_rate_position_velocity_ned(0.2);
+    telemetry.position_velocity_ned_async([](Telemetry::PositionVelocityNED position_velocity_ned) {
+        cout << CLI_COLOR_BLUE << position_velocity_ned.position << CLI_COLOR_NORMAL << endl;
+    });
+
+    // Subscribe to rotations
+    telemetry.set_rate_attitude(0.2);
+    telemetry.attitude_euler_angle_async([](Telemetry::EulerAngle euler_angle) {
+      cout << CLI_COLOR_BLUE << euler_angle << CLI_COLOR_NORMAL << endl;
+    });
+
 #if 0
     telemetry.set_rate_attitude(1.0);
     telemetry.attitude_euler_angle_async([](Telemetry::EulerAngle ea) {
