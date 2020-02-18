@@ -14,6 +14,7 @@
 #include <mavsdk/plugins/telemetry/telemetry.h>
 
 #include <chrono>
+#include <filesystem>
 #include <thread>
 
 using namespace cv;
@@ -22,6 +23,8 @@ using namespace mavsdk;
 using namespace std;
 using namespace std::chrono;
 using namespace std::this_thread;
+
+namespace fs = std::filesystem;
 
 enum TrackingStatus {
     BeforeTracking,
@@ -52,5 +55,7 @@ void exit_and_land(const Action& action, const Telemetry& telemetry);
 Matx33f euler_angle_to_rotation_matrix(const Telemetry::EulerAngle& ea);
 
 pair<optional<float>, optional<float>> solve_quadratic(float a, float b, float c);
+
+string generate_video_filename(const string& suffix = "catch");
 
 #endif // CATCH_COMMON_H

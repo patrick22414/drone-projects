@@ -27,10 +27,11 @@ int main(int argc, char* argv[])
     options.add_options()
         ("h,help", "Print help message")
         ("v,video", "Use a video file instead of the camera for testing", cxxopts::value<string>())
-        ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("30"))
+        ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("15"))
         ("r,resolution","Camera resolution. One of 's': 640x480; 'm': 1296x972; 'l': 2592x1944",cxxopts::value<char>()->default_value("s"))
-        ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<float>()->default_value("3"))
-        ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<float>()->default_value("3"))
+        ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<float>()->default_value("-1"))
+        ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<float>()->default_value("2"))
+        ("o,output", "Output to video ~/Videos/v*-catch.mp4", cxxopts::value<bool>()->default_value("false"))
         ("connection", "MAVSDK connection url", cxxopts::value<string>()->default_value("serial:///dev/serial0:921600"));
     options.parse_positional({"connection"});
     // clang-format on
@@ -42,6 +43,7 @@ int main(int argc, char* argv[])
     auto res_char    = args["resolution"].as<char>();
     auto catch_alt   = args["catch-alt"].as<float>();
     auto takeoff_alt = args["takeoff-alt"].as<float>();
+    auto use_output  = args["output"].as<bool>();
     auto connection  = args["connection"].as<string>();
 
     if (args.count("help")) {
@@ -50,7 +52,7 @@ int main(int argc, char* argv[])
     }
 
     if (catch_alt < 3 && catch_alt != -1) {
-        cerr << CLI_COLOR_RED << "Invalid altitude `" << catch_alt
+        cerr << CLI_COLOR_RED << "Invalid catch altitude `" << catch_alt
              << "`. Must be at least 3 meters or -1 (use current altitude)" << CLI_COLOR_NORMAL << endl;
         exit(-1);
     }
@@ -90,9 +92,27 @@ int main(int argc, char* argv[])
         cerr << "Cannot read frame" << endl;
         exit(-1);
     }
+
     if (!video_file.empty()) {
         cout << "Ignoring camera resolution setting when using a video" << endl;
         resolution = {im.cols, im.rows};
+    }
+
+    // Prepare VideoWriter
+    VideoWriter writer;
+
+    if (use_output) {
+        auto codec    = VideoWriter::fourcc('m', 'p', '4', 'v');
+        auto fps      = 30.0;
+        auto filename = generate_video_filename();
+
+        writer.open(filename, codec, fps, im.size(), true);
+
+        // check if we succeeded
+        if (!writer.isOpened()) {
+            cerr << "Could not open the output video file for write\n";
+            return -1;
+        }
     }
 
 #ifdef USE_DRONE
@@ -119,12 +139,6 @@ int main(int argc, char* argv[])
     telemetry.set_rate_position_velocity_ned(0.2);
     telemetry.position_velocity_ned_async([](Telemetry::PositionVelocityNED position_velocity_ned) {
         cout << CLI_COLOR_BLUE << position_velocity_ned.position << CLI_COLOR_NORMAL << endl;
-    });
-
-    // Subscribe to rotations
-    telemetry.set_rate_attitude(0.2);
-    telemetry.attitude_euler_angle_async([](Telemetry::EulerAngle euler_angle) {
-      cout << CLI_COLOR_BLUE << euler_angle << CLI_COLOR_NORMAL << endl;
     });
 
 #if 0
@@ -204,6 +218,9 @@ int main(int argc, char* argv[])
             break;
         }
 
+        if (use_output)
+            writer.write(im);
+
         // Convert to HSV colo space
         cvtColor(im, im_hsv, COLOR_BGR2HSV);
 
@@ -260,11 +277,12 @@ int main(int argc, char* argv[])
         if (tracking_status == DuringTracking && tracking_counter <= -3)
             tracking_status = AfterTracking;
 
-        if (tracking_status == DuringTracking && tracking_records.size() >= n_records)
+        if (tracking_status == DuringTracking && tracking_records.size() >= n_records + 2)
             tracking_status = AfterTracking;
     }
 
     // End of tracking
+    writer.release();
     v.release();
     im.release();
     im_hsv.release();
@@ -303,7 +321,7 @@ int main(int argc, char* argv[])
         positions_w.push_back(record.position_w);
     }
 
-    if (catch_alt < 3) {
+    if (catch_alt == -1) {
 #ifdef USE_DRONE
         catch_alt = telemetry.position().relative_altitude_m;
 #else

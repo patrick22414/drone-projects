@@ -187,10 +187,11 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
         solve(M, uvw2, xyz2);
 
         // Choose a result along the flying direction
-        Vec3f flying_direction = points_w[N - 1] - points_w[0];
+        Vec3f flying_direction   = points_w[N - 1] - points_w[0];
+        Vec3f target_direction_1 = Vec3f(xyz1[0], xyz1[1], xyz1[2]) - points_w[0];
+        Vec3f target_direction_2 = Vec3f(xyz2[0], xyz2[1], xyz2[2]) - points_w[0];
 
-        if (flying_direction.dot(Vec3f(xyz1[0], xyz1[1], xyz1[2])) >
-            flying_direction.dot(Vec3f(xyz2[0], xyz2[1], xyz2[2])))
+        if (flying_direction.dot(target_direction_1) > flying_direction.dot(target_direction_2))
             return {xyz1[0], xyz1[1], xyz1[2], 0};
         else
             return {xyz2[0], xyz2[1], xyz2[2], 0};

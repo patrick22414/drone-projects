@@ -67,3 +67,21 @@ pair<optional<float>, optional<float>> solve_quadratic(float a, float b, float c
 
     return {{}, {}};
 }
+
+string generate_video_filename(const string& suffix)
+{
+    fs::path folder = fs::path(getenv("HOME")) / "Videos";
+    stringstream filename;
+    for (int i = 1;; ++i) {
+        filename.str(""); // clear the stream
+        filename << "v" << i << "-" << suffix << ".mp4";
+
+        if (!fs::exists(fs::path(folder) / filename.str())) {
+            break;
+        }
+    }
+
+    cout << "Using video filename " << fs::path(folder) / filename.str() << endl;
+
+    return fs::path(folder) / filename.str();
+}
