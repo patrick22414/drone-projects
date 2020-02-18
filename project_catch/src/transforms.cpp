@@ -81,7 +81,7 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
 {
     // Find a parabola
     // The parabola is defined as:
-    // --- [u; v; w] = R * [x; y; z] + T
+    // --- [u; v; w; 1] = M * [x; y; z; 1]
     // --- v = p0 + p1 * u + p2 * u^2
     // --- w = 0
     //
