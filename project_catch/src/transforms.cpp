@@ -90,22 +90,21 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
 
     int N = points_w.size();
 
-    Mat XYZ(3, N, CV_32F);
+    Mat XYZ(N, 3, CV_32F);
     for (int i = 0; i < N; ++i) {
-        Mat(points_w[i], false).copyTo(XYZ.col(i));
+        const Vec3f& p = points_w[i];
+        Mat(p).reshape(1, 1).copyTo(XYZ.row(i));
     }
 
     // Fit to a plane y = ax + b
-    Mat A1 = Mat::ones(N, 2, CV_32F);
+    Mat A1(N, 2, CV_32F);
+    XYZ.col(0).copyTo(A1.col(0));
+    A1.col(1) = 1;
 
-    A1.col(0) = XYZ.row(0).t();
-
-    Mat B1 = XYZ.row(1).t();
+    Mat B1 = XYZ.col(1);
 
     Vec2f X1;
     solve(A1, B1, X1, DECOMP_QR);
-
-    cout << "X1 = \n" << X1 << endl;
 
     // Now X1 = [a, b] for the plane y = ax + b
     float a = X1[0];
@@ -115,35 +114,47 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     float x0 = 0;
     float y0 = b;
 
-    // Rotation and Transformation matrices
+    // clang-format off
     float tmp = sqrt(a * a + 1);
-    Matx33f R(1 / tmp, 0, a / tmp, a / tmp, 0, -1 / tmp, 0, 1, 0);
-    Vec3f T(x0, y0, 0);
 
-    Mat UVW = R * XYZ;
-    UVW.row(0) += T[0];
-    UVW.row(1) += T[1];
+    Vec3f T = {   x0,     y0, 0};
+    Vec3f U = {1/tmp,  a/tmp, 0};
+    Vec3f V = {    0,      0, 1};
+    Vec3f W = {a/tmp, -1/tmp, 0};
 
-    cout << "UVW = \n" << format(UVW.t(), Formatter::FMT_NUMPY) << endl;
+    // homogeneous transformation matrix
+    Matx44f M = {
+        U[0], U[1], U[2], -U.dot(T),
+        V[0], V[1], V[2], -V.dot(T),
+        W[0], W[1], W[2], -W.dot(T),
+           0,    0,    0,         1,
+    };
+    // clang-format on
 
-    Mat row_u = UVW.row(0);
-    Mat row_v = UVW.row(1);
+    Mat XYZ1 = Mat::ones(4, N, CV_32F);
+    Mat(XYZ.col(0).t()).copyTo(XYZ1.row(0));
+    Mat(XYZ.col(1).t()).copyTo(XYZ1.row(1));
+    Mat(XYZ.col(2).t()).copyTo(XYZ1.row(2));
+
+    Mat UVW1 = M * XYZ1;
+
+    Mat col_u = UVW1.row(0).t();
+    Mat col_v = UVW1.row(1).t();
 
     // Fit to a parabola on the u-v plane: v = p0 + p1 * u + p2 * u^2
-    Mat A2(N, 3, CV_32F);
-    A2.col(0) = 1;
-    A2.col(1) = row_u.t();
-    A2.col(2) = row_u.mul(row_u).t();
+    Mat A2 = Mat::ones(N, 3, CV_32F);
+    col_u.copyTo(A2.col(1));
+    Mat(col_u.mul(col_u)).copyTo(A2.col(2));
 
     Vec3f X2;
-    solve(A2, row_v.t(), X2, DECOMP_QR);
+    solve(A2, col_v, X2, DECOMP_QR);
 
     float p0 = X2[0];
     float p1 = X2[1];
     float p2 = X2[2];
 
-    cout << CLI_COLOR_GREEN << "Got parabola parameters:" << CLI_COLOR_NORMAL << " [" << a << ", " << b << ", " << p0
-         << ", " << p1 << ", " << p2 << "]" << endl;
+    cout << CLI_COLOR_GREEN << "Got parabola parameters:"
+         << " [" << p0 << ", " << p1 << ", " << p2 << "]" << CLI_COLOR_NORMAL << endl;
 
     // This is the catch altitude in V coordinates
     float v = -catch_alt;
@@ -156,24 +167,25 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     else {
         float u1 = roots.first.value();
 
-        // xyz = R^-1 * (uvw - T)
-        Vec3f uvw1 = Vec3f(u1, v, 0) - T;
-        Vec3f xyz1;
-        solve(R, uvw1, xyz1);
+        // solve M * xyz = uvw
+        Vec4f uvw1 = {u1, v, 0, 1};
+        Vec4f xyz1;
+        solve(M, uvw1, xyz1);
 
         if (!roots.second.has_value())
             return {xyz1[0], xyz1[1], xyz1[2], 0};
 
         float u2 = roots.second.value();
 
-        Vec3f uvw2 = Vec3f(u2, v, 0) - T;
-        Vec3f xyz2;
-        solve(R, uvw1, xyz2);
+        Vec4f uvw2 = {u2, v, 0, 1};
+        Vec4f xyz2;
+        solve(M, uvw2, xyz2);
 
         // Choose a result along the flying direction
         Vec3f flying_direction = points_w[N - 1] - points_w[0];
 
-        if (flying_direction.dot(xyz1) > flying_direction.dot(xyz2))
+        if (flying_direction.dot(Vec3f(xyz1[0], xyz1[1], xyz1[2])) >
+            flying_direction.dot(Vec3f(xyz2[0], xyz2[1], xyz2[2])))
             return {xyz1[0], xyz1[1], xyz1[2], 0};
         else
             return {xyz2[0], xyz2[1], xyz2[2], 0};
