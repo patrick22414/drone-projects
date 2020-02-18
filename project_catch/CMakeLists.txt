@@ -9,8 +9,14 @@ find_package(MAVSDK REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(include)
 
-# Build without USE_DRONE if a drone or simulator is not available
-add_compile_definitions(USE_DRONE)
+option(WITH_DRONE "Build with this if a drone or simulator is not available" ON)
+
+if (WITH_DRONE)
+    message(STATUS "Building WITH DRONE")
+    add_definitions(-DUSE_DRONE)
+else ()
+    message(STATUS "Building WITHOUT DRONE")
+endif ()
 
 add_executable(catch src/main.cpp src/transforms.cpp src/common.cpp)
 
