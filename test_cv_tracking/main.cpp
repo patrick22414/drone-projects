@@ -57,6 +57,7 @@ int main(int argc, char* argv[])
 
         bitwise_or(im_bin_1, im_bin_2, im_bin_1);
 
+        morphologyEx(im_bin_1, im_bin_1, MORPH_OPEN, element);
         morphologyEx(im_bin_1, im_bin_1, MORPH_DILATE, element);
 
         vector<vector<Point2i>> contours;
@@ -94,8 +95,8 @@ int main(int argc, char* argv[])
             circle(im, {x, y}, r, {0, 225, 255}, 1);
         }
 
-        imshow("image", im);
         imshow("image binary", im_bin_1);
+        imshow("image", im);
 
         auto key = waitKey(50);
         if (key == '\x1b') {

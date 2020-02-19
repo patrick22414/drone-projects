@@ -228,6 +228,7 @@ int main(int argc, char* argv[])
         // Combine two color ranges
         bitwise_or(im_bin_1, im_bin_2, im_bin_1);
 
+        morphologyEx(im_bin_1, im_bin_1, MORPH_OPEN, element);
         morphologyEx(im_bin_1, im_bin_1, MORPH_DILATE, element);
 
         // Find contours
@@ -286,7 +287,7 @@ int main(int argc, char* argv[])
     //    im_bin_1.release();
     //    im_bin_2.release();
 
-    // Drop the first and last records as they are in accurate
+    // Drop the first and last records as they are inaccurate
     tracking_records.pop_front();
     tracking_records.pop_back();
 
