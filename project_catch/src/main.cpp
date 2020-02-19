@@ -170,6 +170,7 @@ int main(int argc, char* argv[])
 #endif // USE_DRONE
 
     // Tracking
+    cout << CLI_COLOR_GREEN << "Ready for tracking" << CLI_COLOR_NORMAL << endl;
 
     // Begin tracking when the ball appeared in 2 continuous frames
     // End tracking when the ball disappeared in 2 continuous frames, or after timeout, or when reached n-records
@@ -286,6 +287,7 @@ int main(int argc, char* argv[])
     //    im_hsv.release();
     //    im_bin_1.release();
     //    im_bin_2.release();
+    cout << CLI_COLOR_GREEN << "End of tracking" << CLI_COLOR_NORMAL << endl;
 
     // Drop the first and last records as they are inaccurate
     tracking_records.pop_front();
