@@ -281,13 +281,13 @@ int main(int argc, char* argv[])
     }
 
     // End of tracking
-    //    writer.release();
-    //    v.release();
-    //    im.release();
-    //    im_hsv.release();
-    //    im_bin_1.release();
-    //    im_bin_2.release();
     cout << CLI_COLOR_GREEN << "End of tracking" << CLI_COLOR_NORMAL << endl;
+    writer.release();
+    v.release();
+    im.release();
+    im_hsv.release();
+    im_bin_1.release();
+    im_bin_2.release();
 
     // Drop the first and last records as they are inaccurate
     tracking_records.pop_front();
