@@ -365,21 +365,7 @@ int main(int argc, char* argv[])
     check_offboard_result(offboard_result, "Offboard stop failed: ");
     cout << "Offboard stopped" << endl;
 
-    // Land the vehicle
-    const Action::Result land_result = action.land();
-    check_action_result(land_result, "Landing failed: ");
-
-    // Check if vehicle is still in air
-    while (telemetry.in_air()) {
-        cout << CLI_COLOR_YELLOW << "Vehicle is Landing..." << CLI_COLOR_NORMAL << endl;
-        sleep_for(seconds(2));
-    }
-
-    cout << CLI_COLOR_GREEN << "System landed!" << CLI_COLOR_NORMAL << endl;
-
-    // We are relying on auto-disarming but let's keep watching the telemetry for a bit longer.
-    sleep_for(seconds(2));
-    cout << "Finished." << endl;
+    exit_and_land(action, telemetry);
 #endif // USE_DRONE
 
     return 0;
