@@ -154,8 +154,14 @@ Offboard::PositionNEDYaw calculate_destination_2(const vector<Vec3f>& points_w, 
     float p1 = X2[1];
     float p2 = X2[2];
 
-    cout << CLI_COLOR_GREEN << "Got parabola parameters:"
-         << " [" << p0 << ", " << p1 << ", " << p2 << "]" << CLI_COLOR_NORMAL << endl;
+    if (p2 > 0) {
+        cout << CLI_COLOR_GREEN << "Got parabola parameters:"
+             << " [" << p0 << ", " << p1 << ", " << p2 << "]" << CLI_COLOR_NORMAL << endl;
+    } else {
+        cout << CLI_COLOR_RED << "Got invalid parabola parameters:"
+             << " [" << p0 << ", " << p1 << ", " << p2 << "]" << CLI_COLOR_NORMAL << endl;
+        throw runtime_error("Invalid parabola: p2 should not be <= 0");
+    }
 
     // This is the catch altitude in V coordinates
     float v = -catch_alt;

@@ -31,22 +31,18 @@ int main(int argc, char* argv[])
     bool found_ball_last_time = false;
 
     const Scalar lower_orange_1 = {0, 28, 0};
-    const Scalar upper_orange_1 = {60, 255, 255};
+    const Scalar upper_orange_1 = {60, 255, 100};
 
     const Scalar lower_orange_2 = {108, 28, 0};
-    const Scalar upper_orange_2 = {180, 255, 255};
+    const Scalar upper_orange_2 = {180, 255, 100};
 
     Mat im_hsv;
     Mat im_bin_1;
     Mat im_bin_2;
 
-    // Mat element = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
+    Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
 
-    vector<Vec3d> circles(0);
-
-    double xi = -1;
-    double yi = -1;
-    double ri = -1;
+    vector<Vec3f> circles(0);
 
     while (true) {
         if (!v.read(im)) {
@@ -61,7 +57,7 @@ int main(int argc, char* argv[])
 
         bitwise_or(im_bin_1, im_bin_2, im_bin_1);
 
-        // morphologyEx(im_bin_1, im_bin_1, MORPH_CLOSE, element);
+        morphologyEx(im_bin_1, im_bin_1, MORPH_DILATE, element);
 
         vector<vector<Point2i>> contours;
         vector<Vec4i> hierarchy;
@@ -72,26 +68,15 @@ int main(int argc, char* argv[])
                 return contourArea(c1, false) > contourArea(c2, false);
             });
 
-            auto largestContour = contours[0];
+            auto largest_contour = contours[0];
 
-            auto m = moments(largestContour);
+            Point2f center;
+            float radius;
+            minEnclosingCircle(largest_contour, center, radius);
 
-            double area = m.m00;
-
-            // Use momentum or not
-            if (false) {
-                xi = xi < 0 ? (m.m10 / area) : (0.8 * xi + 0.2 * m.m10 / area);
-                yi = yi < 0 ? (m.m01 / area) : (0.8 * yi + 0.2 * m.m01 / area);
-                ri = ri < 0 ? sqrt(area / CV_PI) : (0.8 * ri + 0.2 * sqrt(area / CV_PI));
-            } else {
-                xi = m.m10 / area;
-                yi = m.m01 / area;
-                ri = sqrt(area / CV_PI);
-            }
-
-            if (ri > 6) {
+            if (radius > 5) {
                 if (found_ball_last_time) {
-                    circles.push_back({xi, yi, ri});
+                    circles.push_back({center.x, center.y, radius});
                 } else {
                     found_ball_last_time = true;
                 }
@@ -112,7 +97,7 @@ int main(int argc, char* argv[])
         imshow("image", im);
         imshow("image binary", im_bin_1);
 
-        auto key = waitKey(33);
+        auto key = waitKey(50);
         if (key == '\x1b') {
             break;
         } else if (key == ' ') {

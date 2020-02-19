@@ -184,19 +184,16 @@ int main(int argc, char* argv[])
 
     // Color range for the orange ball
     const Scalar lower_orange_1 = {0, 28, 0};
-    const Scalar upper_orange_1 = {60, 255, 255};
+    const Scalar upper_orange_1 = {60, 255, 100};
 
     const Scalar lower_orange_2 = {108, 28, 0};
-    const Scalar upper_orange_2 = {180, 255, 255};
+    const Scalar upper_orange_2 = {180, 255, 100};
 
     Mat im_hsv;
     Mat im_bin_1;
     Mat im_bin_2;
 
-    // Ball position and radius in image in pixels
-    float xi;
-    float yi;
-    float ri;
+    Mat element = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
 
     // Assume 30 FPS, tracking timeout in 15 seconds
     for (int i = 0; i < 30 * 15; ++i) {
@@ -231,6 +228,8 @@ int main(int argc, char* argv[])
         // Combine two color ranges
         bitwise_or(im_bin_1, im_bin_2, im_bin_1);
 
+        morphologyEx(im_bin_1, im_bin_1, MORPH_DILATE, element);
+
         // Find contours
         vector<vector<Point2i>> contours;
         vector<Vec4i> hierarchy;
@@ -242,21 +241,19 @@ int main(int argc, char* argv[])
                 return contourArea(c1, false) > contourArea(c2, false);
             });
 
-            auto largestContour = contours[0];
-            auto m              = moments(largestContour);
-            auto area           = (float) m.m00;
+            auto largest_contour = contours[0];
 
-            xi = (float) m.m10 / area;
-            yi = (float) m.m01 / area;
-            ri = (float) sqrt(area / CV_PI);
+            Point2f center;
+            float radius;
+            minEnclosingCircle(largest_contour, center, radius);
 
-            if (ri > 5) {
+            if (radius > 5) {
                 // Count as a ball if the blob has a large enough radius
                 tracking_counter = tracking_counter <= 0 ? 1 : tracking_counter + 1;
 
-                new_record.xi = xi;
-                new_record.yi = yi;
-                new_record.ri = ri;
+                new_record.xi = center.x;
+                new_record.yi = center.y;
+                new_record.ri = radius;
                 tracking_records.push_back(new_record);
             } else {
                 // Otherwise the blob is just noise
@@ -282,12 +279,12 @@ int main(int argc, char* argv[])
     }
 
     // End of tracking
-    writer.release();
-    v.release();
-    im.release();
-    im_hsv.release();
-    im_bin_1.release();
-    im_bin_2.release();
+    //    writer.release();
+    //    v.release();
+    //    im.release();
+    //    im_hsv.release();
+    //    im_bin_1.release();
+    //    im_bin_2.release();
 
     // Drop the first and last records as they are in accurate
     tracking_records.pop_front();
@@ -360,6 +357,7 @@ int main(int argc, char* argv[])
     check_offboard_result(offboard_result, "Offboard start failed: ");
     cout << "Offboard started" << endl;
 
+    offboard.set_position_ned(destination);
     sleep_for(seconds(10));
 
     offboard_result = offboard.stop();
