@@ -21,17 +21,13 @@ Vec3f invert_camera_transform(float ball_x_px, float ball_y_px, float ball_radiu
     float ball_i_y = ball_y_px * pix_size; // ball position y, Image frame
 
     // camera intrinsic matrix
+    // clang-format off
     float intrinsics[9] = {
-        focal_length,
-        0,
-        0.5f * (res_w_px - 1) * pix_size,
-        0,
-        focal_length,
-        0.5f * (res_h_px - 1) * pix_size,
-        0,
-        0,
-        1,
+        focal_length,            0, 0.5f * (res_w_px - 1) * pix_size,
+                   0, focal_length, 0.5f * (res_h_px - 1) * pix_size,
+                   0,            0,                                1,
     };
+    // clang-format on
 
     // object homogeneous coordinates, Image frame (z = 1)
     float object_i_homo[3] = {ball_i_x, ball_i_y, 1};
@@ -64,7 +60,7 @@ Vec3f invert_camera_transform(float ball_x_px, float ball_y_px, float ball_radiu
 Vec3f invert_world_transform(const Vec3f& p_c, const Telemetry::PositionNED& t, const Telemetry::EulerAngle& r)
 {
     Matx33f drone_attitude_rotation  = euler_angle_to_rotation_matrix(r);
-    Matx33f camera_mounting_rotation = euler_angle_to_rotation_matrix({0, 180, 90 + 20});
+    Matx33f camera_mounting_rotation = euler_angle_to_rotation_matrix({0, 180, 90 + 27.5});
 
     // Total extrinsic rotation
     Matx33f A = drone_attitude_rotation * camera_mounting_rotation;
