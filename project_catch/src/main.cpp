@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
     options.add_options()
         ("h,help", "Print help message")
         ("v,video", "Use a video file instead of the camera for testing", cxxopts::value<string>())
-        ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("15"))
+        ("n,n-records","Maximum number of records used to calculate the trajectory of the ball", cxxopts::value<int>()->default_value("10"))
         ("r,resolution","Camera resolution. One of 's': 640x480; 'm': 1296x972; 'l': 2592x1944",cxxopts::value<char>()->default_value("s"))
         ("c,catch-alt", "Altitude used to catch the ball",cxxopts::value<float>()->default_value("-1"))
         ("t,takeoff-alt", "Altitude used for takeoff", cxxopts::value<float>()->default_value("2"))
@@ -51,9 +51,9 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    if (catch_alt < 3 && catch_alt != -1) {
+    if (catch_alt < 1 && catch_alt != -1) {
         cerr << CLI_COLOR_RED << "Invalid catch altitude `" << catch_alt
-             << "`. Must be at least 3 meters or -1 (use current altitude)" << CLI_COLOR_NORMAL << endl;
+             << "`. Must be at least 1 meters or -1 (use current altitude)" << CLI_COLOR_NORMAL << endl;
         exit(-1);
     }
 
@@ -171,8 +171,8 @@ int main(int argc, char* argv[])
 
     // Tracking
 
-    // Begin tracking when the ball appeared in 3 continuous frames
-    // End tracking when the ball disappeared in 3 continuous frames, or after timeout, or when reached n-records
+    // Begin tracking when the ball appeared in 2 continuous frames
+    // End tracking when the ball disappeared in 2 continuous frames, or after timeout, or when reached n-records
     TrackingStatus tracking_status = BeforeTracking;
 
     // Negative means number of continuous frames without a ball
@@ -250,7 +250,7 @@ int main(int argc, char* argv[])
             yi = (float) m.m01 / area;
             ri = (float) sqrt(area / CV_PI);
 
-            if (ri > 6) {
+            if (ri > 5) {
                 // Count as a ball if the blob has a large enough radius
                 tracking_counter = tracking_counter <= 0 ? 1 : tracking_counter + 1;
 
@@ -271,10 +271,10 @@ int main(int argc, char* argv[])
         if (tracking_status == BeforeTracking && tracking_counter < 0)
             tracking_records.clear();
 
-        if (tracking_status == BeforeTracking && tracking_counter >= 3)
+        if (tracking_status == BeforeTracking && tracking_counter >= 2)
             tracking_status = DuringTracking;
 
-        if (tracking_status == DuringTracking && tracking_counter <= -3)
+        if (tracking_status == DuringTracking && tracking_counter <= -2)
             tracking_status = AfterTracking;
 
         if (tracking_status == DuringTracking && tracking_records.size() >= n_records + 2)
