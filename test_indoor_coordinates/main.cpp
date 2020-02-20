@@ -1,14 +1,20 @@
 #include <opencv2/opencv.hpp>
+#include <Eigen/Dense>
 
 #define CLI_COLOR_RED "\033[31m"   // Turn text on console red
 #define CLI_COLOR_GREEN "\033[32m" // Turn text on console red
 #define CLI_COLOR_NORMAL "\033[0m" // Restore normal console colour
 
+namespace eg = Eigen;
+
 cv::Vec3f invert_camera_transform(float ball_x_px, float ball_y_px, float ball_radius_px, const cv::Vec2i& resolution);
+
+eg::Vector3f
+invert_camera_transform_eg(float ball_x_px, float ball_y_px, float ball_radius_px, const eg::Vector2i& resolution);
 
 int main()
 {
-    const cv::Vec2i resolution = {640, 480};
+    const eg::Vector2i resolution(640, 480);
 
     cv::VideoCapture capture(0, cv::CAP_V4L2);
     capture.set(cv::CAP_PROP_FRAME_WIDTH, resolution[0]);
@@ -65,7 +71,7 @@ int main()
 
             // Count as a ball if the blob has a large enough radius
             if (radius > 10) {
-                auto c = invert_camera_transform(center.x, center.y, radius, resolution) * 100;
+                auto c = invert_camera_transform_eg(center.x, center.y, radius, resolution) * 100;
 
                 char text[99];
                 std::sprintf(text, "[% d,% d,% d]", (int) c[0], (int) c[1], (int) c[2]);
@@ -99,6 +105,42 @@ int main()
     return 0;
 }
 
+eg::Vector3f
+invert_camera_transform_eg(float ball_x_px, float ball_y_px, float ball_radius_px, const eg::Vector2i& resolution)
+{
+    const float ball_radius = 1e-2 * 2.5 * 2.54; // tiny basketball radius 2.5 inches
+
+    // Pi Camera V1 parameters
+    const float sensor_w_px   = 2592;   // sensor width in pixels
+    const float sensor_h_px   = 1944;   // sensor height in pixels
+    const float focal_length  = 3.6e-3; // focal length 3.6mm
+    const float real_pix_size = 1.4e-6; // real pixel size 1.4um
+
+    auto res_w_px = static_cast<float>(resolution(0));
+    auto res_h_px = static_cast<float>(resolution(1));
+
+    float pix_size = real_pix_size * (sensor_w_px / res_w_px); // relative pixel size with binning
+
+    float ball_i_x = ball_x_px * pix_size; // ball position x, Image frame
+    float ball_i_y = ball_y_px * pix_size; // ball position y, Image frame
+
+    float z_c = ball_radius / (ball_radius_px * pix_size) * focal_length;
+
+    eg::Matrix3f intrinsics;
+    // clang-format off
+    intrinsics << focal_length,            0, 0.5f * (res_w_px - 1) * pix_size,
+                             0, focal_length, 0.5f * (res_h_px - 1) * pix_size,
+                             0,            0,                                1;
+    // clang-format on
+
+    eg::Vector3f target_i;
+    target_i << ball_i_x, ball_i_y, z_c;
+
+    eg::Vector3f target_c = intrinsics.jacobiSvd(eg::ComputeFullU | eg::ComputeFullV).solve(target_i);
+
+    return target_c;
+}
+
 cv::Vec3f invert_camera_transform(float ball_x_px, float ball_y_px, float ball_radius_px, const cv::Vec2i& resolution)
 {
     const float ball_radius = 1e-2 * 2.5 * 2.54; // tiny basketball radius 2.5 inches
@@ -121,8 +163,8 @@ cv::Vec3f invert_camera_transform(float ball_x_px, float ball_y_px, float ball_r
     // clang-format off
     float intrinsics[9] = {
         focal_length,            0, 0.5f * (res_w_px - 1) * pix_size,
-        0, focal_length, 0.5f * (res_h_px - 1) * pix_size,
-        0,            0,                                1,
+        0,            focal_length, 0.5f * (res_h_px - 1) * pix_size,
+        0,                       0,                                1,
     };
     // clang-format on
 
