@@ -81,7 +81,7 @@ int main()
             }
 
             // Wait for half a second
-            auto key = cv::waitKey(1000);
+            auto key = cv::waitKey(100);
 
             if (key == '\x1b') {
                 break;
