@@ -65,17 +65,23 @@ int main()
 
             // Count as a ball if the blob has a large enough radius
             if (radius > 10) {
-                auto c = invert_camera_transform(center.x, center.y, radius, resolution);
+                auto c = invert_camera_transform(center.x, center.y, radius, resolution) * 100;
 
-                std::printf("Camera frame coordinates: [% .2f, % .2f, % .2f]\n", c[0], c[1], c[2]);
+                char text[99];
+                std::sprintf(text, "[% d,% d,% d]", (int) c[0], (int) c[1], (int) c[2]);
 
                 cv::circle(im, cv::Point(center), radius, {255, 255, 0}, 2);
+
+                cv::Point text_center(center.x - 60, center.y);
+                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {0, 0, 0}, 3);
+                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {255, 255, 0});
+
                 cv::imshow("im_bin", im_bin);
                 cv::imshow("im", im);
             }
 
             // Wait for half a second
-            auto key = cv::waitKey(500);
+            auto key = cv::waitKey(1000);
 
             if (key == '\x1b') {
                 break;
