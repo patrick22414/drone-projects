@@ -19,8 +19,8 @@ int main()
         exit(-1);
     }
 
-    const cv::Scalar lower_orange = {0, 28, 0};
-    const cv::Scalar upper_orange = {60, 255, 100};
+    const cv::Scalar lower_orange = {0, 60, 0};
+    const cv::Scalar upper_orange = {45, 255, 100};
 
     cv::Mat im;
     cv::Mat im_hsv;
@@ -57,7 +57,7 @@ int main()
                     return cv::contourArea(c1, false) > cv::contourArea(c2, false);
                 });
 
-            auto largest_contour = contours[0];
+            const auto& largest_contour = contours[0];
 
             auto center = cv::Point2f();
             auto radius = 0.0f;
@@ -75,23 +75,23 @@ int main()
                 cv::Point text_center(center.x - 60, center.y);
                 cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {0, 0, 0}, 3);
                 cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {255, 255, 0});
-
-                cv::imshow("im_bin", im_bin);
-                cv::imshow("im", im);
             }
+        }
 
-            // Wait for half a second
-            auto key = cv::waitKey(100);
+        cv::imshow("im_bin", im_bin);
+        cv::imshow("im", im);
 
+        // Wait for half a second
+        auto key = cv::waitKey(100);
+
+        if (key == '\x1b') {
+            break;
+        } else if (key == ' ') {
+            key = cv::waitKey(-1);
             if (key == '\x1b') {
                 break;
             } else if (key == ' ') {
-                key = cv::waitKey(-1);
-                if (key == '\x1b') {
-                    break;
-                } else if (key == ' ') {
-                    continue;
-                }
+                continue;
             }
         }
     }
