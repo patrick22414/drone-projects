@@ -70,11 +70,11 @@ int main()
                 char text[99];
                 std::sprintf(text, "[% d,% d,% d]", (int) c[0], (int) c[1], (int) c[2]);
 
-                cv::circle(im, cv::Point(center), radius, {255, 255, 0}, 2);
+                cv::circle(im, cv::Point(center), radius, {255, 0, 0}, 3);
 
-                cv::Point text_center(center.x - 60, center.y);
-                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {0, 0, 0}, 3);
-                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 0.6, {255, 255, 0});
+                cv::Point text_center(center.x - 110, center.y);
+                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 1, {255, 255, 255}, 8);
+                cv::putText(im, std::string(text), text_center, cv::FONT_HERSHEY_COMPLEX, 1, {255, 0, 0}, 2);
             }
         }
 
