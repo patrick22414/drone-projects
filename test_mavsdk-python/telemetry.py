@@ -7,13 +7,15 @@ from mavsdk import System
 async def run():
     # Init the drone
     drone = System()
-    await drone.connect(system_address="udp://:14540")
+    await drone.connect(system_address="serial:///dev/serial0:921600")
 
     # Start the tasks
     asyncio.ensure_future(print_battery(drone))
-    asyncio.ensure_future(print_gps_info(drone))
-    asyncio.ensure_future(print_in_air(drone))
+    # asyncio.ensure_future(print_gps_info(drone))
+    # asyncio.ensure_future(print_in_air(drone))
     asyncio.ensure_future(print_position(drone))
+    asyncio.ensure_future(print_attitude(drone))
+
 
 async def print_battery(drone):
     async for battery in drone.telemetry.battery():
@@ -33,6 +35,11 @@ async def print_in_air(drone):
 async def print_position(drone):
     async for position in drone.telemetry.position():
         print(position)
+
+
+async def print_attitude(drone):
+    async for attitude in drone.telemetry.attitude():
+        print(attitude)
 
 
 if __name__ == "__main__":
