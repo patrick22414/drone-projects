@@ -153,7 +153,7 @@ int main(int argc, char** argv)
     Action::Result takeoff_result = action.takeoff();
     check_action_result(takeoff_result, "Takeoff failed");
     std::cout << "In Air..." << std::endl;
-    sleep_for(milliseconds(3000));
+    sleep_for(milliseconds(5000));
 
     // Start offboard test
     offboard.set_position_ned({0, 0, -5, 0});
@@ -164,64 +164,67 @@ int main(int argc, char** argv)
 
     std::cout << "PITCH DOWN to the north" << std::endl;
 #ifdef USE_VELOCITY_CONTROL
-    offboard.set_velocity_ned({10, 0, 0, 0});
+    offboard.set_velocity_ned({5, 0, 0, 0});
     sleep_for(milliseconds(2000));
     offboard.set_velocity_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(1000));
+    sleep_for(milliseconds(2000));
 #else
     offboard.set_position_ned({10, 0, -5, 0});
-    sleep_for(milliseconds(5000));
+    sleep_for(milliseconds(8000));
 #endif
 
     std::cout << "PITCH UP to the south" << std::endl;
 #ifdef USE_VELOCITY_CONTROL
-    offboard.set_velocity_ned({-10, 0, 0, 0});
+    offboard.set_velocity_ned({-5, 0, 0, 0});
     sleep_for(milliseconds(2000));
     offboard.set_velocity_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(1000));
+    sleep_for(milliseconds(2000));
 #else
     offboard.set_position_ned({0, 0, -5, 0});
-    sleep_for(milliseconds(5000));
+    sleep_for(milliseconds(8000));
 #endif
 
     std::cout << "ROLL RIGHT to the east" << std::endl;
 #ifdef USE_VELOCITY_CONTROL
-    offboard.set_velocity_ned({0, 10, 0, 0});
+    offboard.set_velocity_ned({0, 5, 0, 0});
     sleep_for(milliseconds(2000));
     offboard.set_velocity_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(1000));
+    sleep_for(milliseconds(2000));
 #else
     offboard.set_position_ned({0, 10, -5, 0});
-    sleep_for(milliseconds(5000));
+    sleep_for(milliseconds(8000));
 #endif
 
     std::cout << "ROLL LEFT to the west" << std::endl;
 #ifdef USE_VELOCITY_CONTROL
-    offboard.set_velocity_ned({0, -10, 0, 0});
+    offboard.set_velocity_ned({0, -5, 0, 0});
     sleep_for(milliseconds(2000));
     offboard.set_velocity_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(1000));
+    sleep_for(milliseconds(2000));
 #else
     offboard.set_position_ned({0, 0, -5, 0});
-    sleep_for(milliseconds(5000));
+    sleep_for(milliseconds(8000));
 #endif
 
     std::cout << "YAW CLOCKWISE" << std::endl;
     offboard.set_velocity_ned({0, 0, 0, 90});
     sleep_for(milliseconds(100));
     offboard.set_velocity_ned({0, 0, 0, 180});
-    sleep_for(milliseconds(2000));
+    sleep_for(milliseconds(5000));
 
     std::cout << "YAW COUNTER-CLOCKWISE" << std::endl;
     offboard.set_velocity_ned({0, 0, 0, 90});
     sleep_for(milliseconds(100));
     offboard.set_velocity_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(2000));
+    sleep_for(milliseconds(5000));
 
     const Offboard::Result offboard_stop_result = offboard.stop();
-    check_offboard_result(offboard_stop_result, "Offboard start failed:");
+    check_offboard_result(offboard_stop_result, "Offboard stop failed:");
 
-    const Action::Result land_result = action.land();
+    action.set_return_to_launch_return_altitude(telemetry.position().relative_altitude_m);
+    sleep_for(milliseconds(2000));
+
+    const Action::Result land_result = action.return_to_launch();
     check_action_result(land_result, "Landing failed");
 
     // Check if vehicle is still in air
