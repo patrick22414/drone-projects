@@ -242,12 +242,12 @@ int main(int argc, char** argv)
 #endif
 
     std::cout << "YAW CLOCKWISE" << std::endl;
-    offboard.set_position_ned({0, 0, 0, 179});
-    sleep_for(milliseconds(5000));
+    offboard.set_velocity_body({0, 0, 0, 60});
+    sleep_for(milliseconds(6000));
 
     std::cout << "YAW COUNTER-CLOCKWISE" << std::endl;
-    offboard.set_position_ned({0, 0, 0, 0});
-    sleep_for(milliseconds(5000));
+    offboard.set_velocity_body({0, 0, 0, -60});
+    sleep_for(milliseconds(6000));
 
     const Offboard::Result offboard_stop_result = offboard.stop();
     check_offboard_result(offboard_stop_result, "Offboard stop failed:");
