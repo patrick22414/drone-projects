@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 {
     Mat src;
     // use default camera as video source
-    VideoCapture cap(0, CAP_GSTREAMER);
+    VideoCapture cap(0, CAP_V4L);
     cap.set(CAP_PROP_FRAME_WIDTH, 640);
     cap.set(CAP_PROP_FRAME_HEIGHT, 480);
     cap.set(CAP_PROP_AUTO_WB, 0);
