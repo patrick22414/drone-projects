@@ -72,6 +72,7 @@ void start_recording()
 
     capture.set(cv::CAP_PROP_FRAME_WIDTH, 640);
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+    capture.set(cv::CAP_PROP_AUTO_WB, 0);
 
     if (!capture.isOpened()) {
         std::cerr << CONSOLE_TEXT_ERROR << "Cannot open camera capture" << CONSOLE_TEXT_NORMAL << std::endl;
