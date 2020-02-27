@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 {
     Mat src;
     // use default camera as video source
-    VideoCapture cap(0, CAP_V4L2);
+    VideoCapture cap(0, CAP_GSTREAMER);
     cap.set(CAP_PROP_FRAME_WIDTH, 640);
     cap.set(CAP_PROP_FRAME_HEIGHT, 480);
     cap.set(CAP_PROP_AUTO_WB, 0);
@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     }
 
     //--- GRAB AND WRITE LOOP
-    auto total_time = 5;
+    auto total_time = 3;
     std::cout << "Writing video file: " << filename << std::endl << "Press any key to terminate" << std::endl;
     for (int i = 0; i < total_time * fps; ++i) {
         // check if we succeeded
@@ -76,6 +76,9 @@ int main(int argc, char* argv[])
 
         // encode the frame into the video file stream
         writer.write(src);
+
+        imshow("live", src);
+        waitKey(1);
     }
 
     // the video file will be closed and released automatically in VideoWriter destructor
