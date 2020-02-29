@@ -5,4 +5,4 @@ A collection of test programs relating to my undergraduate senior project at BYU
 ## Dependencies
 - OpenCV
 - MAVSDK
-
+- Eigen
