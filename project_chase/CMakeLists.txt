@@ -9,7 +9,7 @@ find_package(OpenCV REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-add_executable(chase src/main.cpp src/_common.h src/Chase2D.cpp src/Chase2D.h)
+add_executable(chase src/main.cpp src/Chase2D.cpp src/Chase2D.h)
 
 target_link_libraries(chase
         Eigen3::Eigen

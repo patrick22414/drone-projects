@@ -1,12 +1,4 @@
-#include "argparse.hpp"
-
-#include <Eigen/Dense>
-#include <iostream>
-#include <mavsdk/mavsdk.h>
-#include <opencv2/opencv.hpp>
-
-using namespace Eigen;
-using namespace mavsdk;
+#include "Chase2D.h"
 
 int main()
 {
