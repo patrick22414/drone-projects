@@ -6,6 +6,8 @@
 #define CLI_COLOR_YELLOW "\033[33m" // Turn text on console red
 #define CLI_COLOR_NORMAL "\033[0m"  // Restore normal console colour
 
+#include "CameraProfile.h"
+
 #include <Eigen/Dense>
 #include <mavsdk/mavsdk.h>
 #include <mavsdk/plugins/action/action.h>
@@ -14,6 +16,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <chrono>
+#include <mutex>
 #include <thread>
 
 namespace mav = mavsdk;
@@ -29,11 +32,7 @@ public:
     typedef std::chrono::steady_clock             Clock;
     typedef std::chrono::steady_clock::time_point Timestamp;
 
-    Chase2D(
-        const std::string&  connection,
-        int                 camera,
-        const eg::Vector2i& resolution,
-        const std::string&  video_output = "");
+    Chase2D(const std::string& connection, const CameraProfile& camera, const std::string& video_output = "");
 
     Chase2D(const std::string& connection, const std::string& video_input);
 
@@ -43,8 +42,6 @@ public:
 
     void stop();
 
-    void generate_flight_log(const std::string& log_file);
-
 private:
     explicit Chase2D(const std::string& connection);
 
@@ -52,38 +49,48 @@ private:
     bool is_tracking  = false;
     bool is_chasing   = false;
 
+    std::mutex mutex;
+
     std::thread recording_thread;
     std::thread tracking_thread;
     std::thread chasing_thread;
 
-    Timestamp old_timestamp;
-    Timestamp new_timestamp;
-
-    std::list<eg::Vector2f> positions_i; // target positions in Image frame
-    std::list<eg::Vector3f> positions_c; // target positions in Camera frame, `z` is always 1 since depth is unknown
-    std::list<eg::Vector3f> positions_w; // target positions in World frame, using NED coordinates
+    std::vector<eg::Vector2f> positions_i; // target positions in Image frame
+    std::vector<eg::Vector3f> positions_c; // target positions in Camera frame, `z` is always 1 since depth is unknown
+    std::vector<eg::Vector3f> positions_w; // target positions in World frame, using NED coordinates
 
     cv::VideoCapture capture;
     cv::VideoWriter  writer;
 
     eg::Vector2i resolution;
 
+    eg::Matrix3f intrinsics;
+    eg::Matrix4f extrinsics;
+
     std::shared_ptr<mav::Action>    action;
     std::shared_ptr<mav::Offboard>  offboard;
     std::shared_ptr<mav::Telemetry> telemetry;
 
-    cv::Mat im;
+    cv::Mat                     frame;
+    Timestamp                   frame_timestamp;
+    mav::Telemetry::PositionNED frame_position = {};
+    mav::Telemetry::EulerAngle  frame_attitude = {};
+
+    Timestamp tracked_timestamp;
 
     void recording_routine(bool show_live);
     void tracking_routine(bool show_live);
     void chasing_routine(float v_speed, float h_speed);
 
-    eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i, float z); // TODO: add camera profile
-    eg::Vector3f invert_world_transform(const eg::Vector3f& position_c); // TODO: add drone rotation/translation
+    eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i);
+    eg::Vector3f invert_world_transform(const eg::Vector3f& position_c);
 
-    inline auto current_position() { return this->telemetry->position_velocity_ned().position; }
-    inline auto current_velocity() { return this->telemetry->position_velocity_ned().velocity; }
+    inline auto current_position() { return this->telemetry->position_velocity_ned().position; };
     inline auto current_attitude() { return this->telemetry->attitude_euler_angle(); }
+
+    static eg::Matrix4f build_extrinsics(mav::Telemetry::PositionNED translation, mav::Telemetry::EulerAngle rotation);
+
+    static eg::Matrix3f euler_angle_to_rotation_matrix(mav::Telemetry::EulerAngle ea);
 
     inline static void check_action_result(mav::Action::Result result)
     {

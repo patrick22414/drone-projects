@@ -2,12 +2,11 @@
 
 int main()
 {
-    // TODO
-    Chase2D chase("udp://:14540", "test-v1.mp4");
+    mav::Telemetry::PositionNED position_ned{1, 2, 3};
 
-    chase.start(1, 1);
+    eg::Vector3f vector_3_f(position_ned.north_m, position_ned.east_m, position_ned.down_m);
 
-    chase.stop();
+    std::cout << vector_3_f << std::endl;
 
     return 0;
 }

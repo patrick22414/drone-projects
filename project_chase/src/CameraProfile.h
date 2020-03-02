@@ -10,6 +10,7 @@ public:
     CameraProfile(int index, float focal_length_m, float pixel_size_m, eg::Vector2i resolution)
     {
         this->index = index;
+        this->resolution = resolution;
 
         // clang-format off
         intrinsics <<
@@ -20,7 +21,7 @@ public:
     }
 
     int index;
-
+    eg::Vector2i resolution;
     eg::Matrix3f intrinsics;
 };
 

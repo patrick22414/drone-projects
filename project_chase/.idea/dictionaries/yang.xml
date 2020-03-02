@@ -2,6 +2,7 @@
   <dictionary name="yang">
     <words>
       <w>argparse</w>
+      <w>extrinsics</w>
       <w>offboard</w>
     </words>
   </dictionary>
