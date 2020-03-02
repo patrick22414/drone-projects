@@ -19,13 +19,16 @@
 namespace mav = mavsdk;
 namespace eg  = Eigen;
 
-using std::chrono::seconds;
 using std::chrono::milliseconds;
+using std::chrono::seconds;
 using std::this_thread::sleep_for;
 
 class Chase2D {
     // TODO
 public:
+    typedef std::chrono::steady_clock             Clock;
+    typedef std::chrono::steady_clock::time_point Timestamp;
+
     Chase2D(
         const std::string&  connection,
         int                 camera,
@@ -34,8 +37,27 @@ public:
 
     Chase2D(const std::string& connection, const std::string& video_input);
 
+    ~Chase2D() { stop(); };
+
+    void start(float v_speed, float h_speed, bool show_live = false);
+
+    void stop();
+
+    void generate_flight_log(const std::string& log_file);
+
 private:
     explicit Chase2D(const std::string& connection);
+
+    bool is_recording = false;
+    bool is_tracking  = false;
+    bool is_chasing   = false;
+
+    std::thread recording_thread;
+    std::thread tracking_thread;
+    std::thread chasing_thread;
+
+    Timestamp old_timestamp;
+    Timestamp new_timestamp;
 
     std::list<eg::Vector2f> positions_i; // target positions in Image frame
     std::list<eg::Vector3f> positions_c; // target positions in Camera frame, `z` is always 1 since depth is unknown
@@ -51,6 +73,13 @@ private:
     std::shared_ptr<mav::Telemetry> telemetry;
 
     cv::Mat im;
+
+    void recording_routine(bool show_live);
+    void tracking_routine(bool show_live);
+    void chasing_routine(float v_speed, float h_speed);
+
+    eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i, float z); // TODO: add camera profile
+    eg::Vector3f invert_world_transform(const eg::Vector3f& position_c); // TODO: add drone rotation/translation
 
     inline auto current_position() { return this->telemetry->position_velocity_ned().position; }
     inline auto current_velocity() { return this->telemetry->position_velocity_ned().velocity; }

@@ -3,6 +3,11 @@
 int main()
 {
     // TODO
-    std::cout << "Hello, World!" << std::endl;
+    Chase2D chase("udp://:14540", "test-v1.mp4");
+
+    chase.start(1, 1);
+
+    chase.stop();
+
     return 0;
 }
