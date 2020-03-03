@@ -74,7 +74,7 @@ Chase2D::Chase2D(const std::string& connection)
     log_green("Connection complete");
 }
 
-void Chase2D::start(float v_speed, float h_speed, bool show_live)
+void Chase2D::start(const Eigen::Vector3f& speed_presets, bool show_live)
 {
     is_recording     = true;
     recording_thread = std::thread(&Chase2D::recording_routine, this, show_live);
@@ -83,7 +83,7 @@ void Chase2D::start(float v_speed, float h_speed, bool show_live)
     tracking_thread = std::thread(&Chase2D::tracking_routine, this, show_live);
 
     is_chasing     = true;
-    chasing_thread = std::thread(&Chase2D::chasing_routine, this, v_speed, h_speed);
+    chasing_thread = std::thread(&Chase2D::chasing_routine, this, speed_presets[0], speed_presets[1], speed_presets[2]);
 }
 
 void Chase2D::recording_routine(bool show_live)
@@ -102,6 +102,8 @@ void Chase2D::recording_routine(bool show_live)
 
         if (!capture.read(frame))
             log_red_and_exit("Cannot read frame or end of video");
+
+        cv::flip(frame, frame, -1);
 
         mutex.unlock(); // END CRITICAL SECTION
 
@@ -125,85 +127,108 @@ void Chase2D::tracking_routine(bool show_live)
     log("Start tracking routine");
 
     cv::Mat im;
-    cv::Mat im_grey;
 
     while (is_tracking) {
         if (frame_timestamp > tracked_timestamp) {
             mutex.lock(); // CRITICAL SECTION
 
             tracked_timestamp = frame_timestamp;
-
+            extrinsics        = build_extrinsics(frame_position, frame_attitude);
             frame.copyTo(im);
 
             mutex.unlock(); // END CRITICAL SECTION
 
-            // TODO: Locate target in Image and put into positions_i
-            eg::Vector2f position_i = {};
+            // Locate target in Image and put into positions_i
+            auto position_i = visual_detection(im);
+
+            // Transform target to Camera and put into positions_c (fake homogeneous coordinates)
+            // auto position_c = invert_camera_transform(position_i);
+
+            // Transform target to World and put into positions_w (fake homogeneous coordinates)
+            // auto position_w = invert_world_transform(position_c);
+
+            mutex.lock(); // CRITICAL SECTION
+
             positions_i.push_back(position_i);
+            // positions_c.push_back(position_c);
+            // positions_w.push_back(position_w);
 
-            // TODO: Transform target to Camera and put into positions_c (fake homogeneous coordinates)
-            eg::Vector3f position_c = invert_camera_transform(position_i);
-            positions_c.push_back(position_c);
-
-            // TODO: Transform target to World and put into positions_w (fake homogeneous coordinates)
-            eg::Vector3f position_w = invert_world_transform(position_c);
-            positions_w.push_back(position_w);
+            mutex.unlock(); // END CRITICAL SECTION
         }
     }
 
     log("End tracking routine");
 }
 
-void Chase2D::chasing_routine(float v_speed, float h_speed)
+void Chase2D::chasing_routine(float v_speed, float h_speed, float y_speed)
 {
     // Chasing routine takes the last known position of the target (`positions_w[-1]`) and current telemetry status of
     // the drone, determines the next velocity and gives it to the drone.
     log("Start chasing routine");
 
+    // Must set one offboard command before start offboard
+    offboard->set_velocity_body({0, 0, 0, 0});
+    auto start_result = offboard->start();
+    check_offboard_result(start_result);
+
     while (is_chasing) {
-        // TODO
         mutex.lock(); // CRITICAL SECTION
 
-        auto target_last_known_position = positions_w[positions_w.size() - 1];
+        auto target_last_known_position = positions_i[positions_i.size() - 1];
 
         mutex.unlock(); // END CRITICAL SECTION
+
+        float xc = target_last_known_position[0] - (resolution[0] - 1.0f) / 2.0f;
+        float yc = target_last_known_position[1] - (resolution[1] - 1.0f) / 2.0f;
+
+        float threshold = resolution[1] / 10.0f;
+
+        float chase_forward = h_speed;
+        float chase_down    = abs(yc) < threshold ? 0 : (yc > 0 ? v_speed : -v_speed);
+        float chase_yaw     = abs(xc) < threshold ? 0 : (xc > 0 ? y_speed : -y_speed);
+
+        offboard->set_velocity_body({chase_forward, 0, chase_down, chase_yaw});
+
+        sleep_for(milliseconds(10));
     }
+
+    auto stop_result = offboard->stop();
+    check_offboard_result(stop_result);
 
     log("End chasing routine");
 }
 
-void Chase2D::stop()
+eg::Vector2f Chase2D::visual_detection(const cv::Mat& im)
 {
-    is_recording = false;
-    is_tracking  = false;
-    is_chasing   = false;
-
-    recording_thread.join();
-    tracking_thread.join();
-    chasing_thread.join();
+    // TODO
+    return Eigen::Vector2f();
 }
 
 eg::Vector3f Chase2D::invert_camera_transform(const eg::Vector2f& position_i)
 {
-    return eg::Vector3f();
+    eg::Vector3f position_i_homo(position_i[0], position_i[1], 1);
+    eg::Vector3f position_c = intrinsics.jacobiSvd(eg::ComputeThinU | eg::ComputeThinV).solve(position_i_homo);
+    return position_c;
 }
 
 eg::Vector3f Chase2D::invert_world_transform(const eg::Vector3f& position_c)
 {
-    return eg::Vector3f();
+    eg::Vector4f position_c_homo(position_c[0], position_c[1], position_c[2], 1);
+    eg::Vector4f position_w_homo = extrinsics.jacobiSvd(eg::ComputeThinU | eg::ComputeThinV).solve(position_c_homo);
+    return position_w_homo.head(3);
 }
 
 eg::Matrix4f Chase2D::build_extrinsics(mav::Telemetry::PositionNED translation, mav::Telemetry::EulerAngle rotation)
 {
-    // TODO
     eg::Matrix4f extrinsics = eg::Matrix4f::Zero();
 
-    auto drone_rotation  = euler_angle_to_rotation_matrix(rotation);
-    auto camera_mounting = euler_angle_to_rotation_matrix({});
+    static const auto camera_mounting_rotation = euler_angle_to_rotation_matrix({180, 90, 0});
 
-    extrinsics.block<3, 3>(0, 0) = drone_rotation * camera_mounting;
+    auto drone_attitude_rotation = euler_angle_to_rotation_matrix(rotation);
 
+    extrinsics.block<3, 3>(0, 0) = drone_attitude_rotation * camera_mounting_rotation;
     extrinsics.block<3, 1>(0, 3) << translation.north_m, translation.east_m, translation.down_m;
+    extrinsics(3, 3) = 1;
 
     return extrinsics;
 }
@@ -224,4 +249,15 @@ eg::Matrix3f Chase2D::euler_angle_to_rotation_matrix(mav::Telemetry::EulerAngle 
     mz << cos(c), -sin(c), 0, sin(c), cos(c), 0, 0, 0, 1;
 
     return mz * my * mx;
+}
+
+void Chase2D::stop()
+{
+    is_recording = false;
+    is_tracking  = false;
+    is_chasing   = false;
+
+    recording_thread.join();
+    tracking_thread.join();
+    chasing_thread.join();
 }

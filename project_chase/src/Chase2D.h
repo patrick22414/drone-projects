@@ -38,7 +38,7 @@ public:
 
     ~Chase2D() { stop(); };
 
-    void start(float v_speed, float h_speed, bool show_live = false);
+    void start(const Eigen::Vector3f& speed_presets, bool show_live = false);
 
     void stop();
 
@@ -80,17 +80,19 @@ private:
 
     void recording_routine(bool show_live);
     void tracking_routine(bool show_live);
-    void chasing_routine(float v_speed, float h_speed);
+    void chasing_routine(float v_speed, float h_speed, float y_speed);
+
+    static eg::Vector2f visual_detection(const cv::Mat& im);
 
     eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i);
     eg::Vector3f invert_world_transform(const eg::Vector3f& position_c);
 
-    inline auto current_position() { return this->telemetry->position_velocity_ned().position; };
-    inline auto current_attitude() { return this->telemetry->attitude_euler_angle(); }
-
     static eg::Matrix4f build_extrinsics(mav::Telemetry::PositionNED translation, mav::Telemetry::EulerAngle rotation);
 
     static eg::Matrix3f euler_angle_to_rotation_matrix(mav::Telemetry::EulerAngle ea);
+
+    inline auto current_position() { return this->telemetry->position_velocity_ned().position; };
+    inline auto current_attitude() { return this->telemetry->attitude_euler_angle(); }
 
     inline static void check_action_result(mav::Action::Result result)
     {

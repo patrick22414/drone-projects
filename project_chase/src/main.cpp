@@ -1,12 +1,19 @@
 #include "Chase2D.h"
 
+eg::Vector2f test()
+{
+    eg::Vector3f vec(1, 2, 3);
+    return vec.head(2);
+}
+
 int main()
 {
-    mav::Telemetry::PositionNED position_ned{1, 2, 3};
+    auto x = test();
+    std::cout << x << std::endl;
 
-    eg::Vector3f vector_3_f(position_ned.north_m, position_ned.east_m, position_ned.down_m);
+    x[0] = 0;
 
-    std::cout << vector_3_f << std::endl;
+    std::cout << x << std::endl;
 
     return 0;
 }
