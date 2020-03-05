@@ -12,7 +12,7 @@ std::string generate_video_filename(const std::string& prefix = "test-recording"
     std::stringstream filename;
     for (int i = 1;; ++i) {
         filename.str("");
-        filename << prefix << "-v" << i << ".mp4";
+        filename << prefix << "-v" << i << ".avi";
 
         if (!fs::exists(fs::path(full_filename) / filename.str())) {
             break;
@@ -26,37 +26,35 @@ std::string generate_video_filename(const std::string& prefix = "test-recording"
 
 int main(int argc, char* argv[])
 {
-    Mat src;
     // use default camera as video source
-    VideoCapture cap(0, CAP_V4L);
-    cap.set(CAP_PROP_FRAME_WIDTH, 640);
-    cap.set(CAP_PROP_FRAME_HEIGHT, 480);
-    cap.set(CAP_PROP_AUTO_WB, 0);
-    cap.set(CAP_PROP_WB_TEMPERATURE, 6000);
+    VideoCapture capture(0, CAP_V4L);
+    capture.set(CAP_PROP_FRAME_WIDTH, 1640);
+    capture.set(CAP_PROP_FRAME_HEIGHT, 1232);
 
     // check if we succeeded
-    if (!cap.isOpened()) {
+    if (!capture.isOpened()) {
         std::cerr << "ERROR! Unable to open camera\n";
         return EXIT_FAILURE;
     }
 
     // get one frame from camera to know frame size and type
-    cap >> src;
+    Mat frame;
+    capture >> frame;
     // check if we succeeded
-    if (src.empty()) {
-        std::cerr << "ERROR! blank frame grabbed\n";
+    if (!capture.read(frame)) {
+        std::cerr << "ERROR! Unable to grab frame\n";
         return EXIT_FAILURE;
     }
 
-    bool isColor = (src.type() == CV_8UC3);
+    bool isColor = (frame.type() == CV_8UC3);
 
     //--- INITIALIZE VIDEOWRITER
     VideoWriter writer;
-    auto codec    = VideoWriter::fourcc('m', 'p', '4', 'v');
-    auto fps      = 30.0;
+    auto codec    = VideoWriter::fourcc('M', 'J', 'P', 'G');
+    auto fps      = 25.0;
     auto filename = argc > 1 ? generate_video_filename(argv[1]) : generate_video_filename();
 
-    writer.open(filename, codec, fps, src.size(), isColor);
+    writer.open(filename, codec, fps, frame.size(), isColor);
 
     // check if we succeeded
     if (!writer.isOpened()) {
@@ -65,19 +63,19 @@ int main(int argc, char* argv[])
     }
 
     //--- GRAB AND WRITE LOOP
-    auto total_time = 3;
+    auto total_time = 5;
     std::cout << "Writing video file: " << filename << std::endl << "Press any key to terminate" << std::endl;
     for (int i = 0; i < total_time * fps; ++i) {
         // check if we succeeded
-        if (!cap.read(src)) {
+        if (!capture.read(frame)) {
             std::cerr << "ERROR! blank frame grabbed\n";
             break;
         }
 
         // encode the frame into the video file stream
-        writer.write(src);
+        writer.write(frame);
 
-        imshow("live", src);
+        imshow("live", frame);
         waitKey(1);
     }
 
