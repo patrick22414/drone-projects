@@ -68,11 +68,7 @@ std::string generate_video_filename(const std::string& prefix = "test")
 
 void start_recording()
 {
-    cv::VideoCapture capture(0, cv::CAP_V4L2);
-
-    capture.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    capture.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-    capture.set(cv::CAP_PROP_AUTO_WB, 0);
+    cv::VideoCapture capture(0, cv::CAP_V4L);
 
     if (!capture.isOpened()) {
         std::cerr << CONSOLE_TEXT_ERROR << "Cannot open camera capture" << CONSOLE_TEXT_NORMAL << std::endl;
@@ -101,38 +97,6 @@ void start_recording()
     }
 
     std::cout << "Stop recording!!!" << std::endl;
-}
-
-float distance_between(const Telemetry::PositionNED& p1, const Telemetry::PositionNED& p2)
-{
-    float n = p1.north_m - p2.north_m;
-    float e = p1.east_m - p2.east_m;
-    float d = p1.down_m - p2.down_m;
-
-    return sqrt(n * n + e * e + d * d);
-}
-
-Offboard::Result
-set_position_ned_by_velocity_control(const Offboard& offboard, Telemetry& telemetry, Offboard::PositionNEDYaw setpoint)
-{
-    Telemetry::PositionNED target = {setpoint.north_m, setpoint.east_m, setpoint.down_m};
-
-    float average_distance = distance_between(telemetry.position_velocity_ned().position, target);
-
-    while (true) {
-        auto current = telemetry.position_velocity_ned().position;
-
-        if (average_distance > 1.0f) {
-            auto yaw = atan2f(target.east_m - current.east_m, target.north_m - current.north_m);
-        } else if (average_distance > 0.1f) {
-
-        }
-        break;
-    }
-
-    // TODO
-
-    return Offboard::Result::SUCCESS;
 }
 
 int main(int argc, char** argv)
