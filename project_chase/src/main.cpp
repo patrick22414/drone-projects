@@ -1,3 +1,4 @@
+#include "argparse.hpp"
 #include "Chase2D.h"
 
 eg::Vector2f test()
@@ -8,6 +9,9 @@ eg::Vector2f test()
 
 int main()
 {
+    argparse::ArgumentParser parser("chase");
+    parser.add_argument("-s", "--show").help("Show live windows").default_value(false).implicit_value(true);
+
     auto x = test();
     std::cout << x << std::endl;
 
