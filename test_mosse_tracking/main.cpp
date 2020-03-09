@@ -21,14 +21,14 @@ int main(int argc, char** argv)
     cv::Mat frame;
 
     // create a tracker object
-    cv::Ptr<cv::Tracker> tracker = cv::TrackerCSRT::create();
+    cv::Ptr<cv::Tracker> tracker = cv::TrackerMOSSE::create();
 
     // set input video
     std::string video = argv[1];
     cv::VideoCapture capture(video);
 
     // get bounding box
-    capture >> frame;
+    capture.read(frame);
     cv::flip(frame, frame, -1);
     roi = cv::selectROI("tracker", frame);
 
@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     printf("Start the tracking process, press ESC to quit.\n");
     while (true) {
         // get frame from the video
-        capture >> frame;
+        capture.read(frame);
         cv::flip(frame, frame, -1);
 
         // stop the program if no more images
