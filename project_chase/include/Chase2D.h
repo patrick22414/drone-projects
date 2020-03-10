@@ -14,6 +14,7 @@
 #include <mavsdk/plugins/offboard/offboard.h>
 #include <mavsdk/plugins/telemetry/telemetry.h>
 #include <opencv2/opencv.hpp>
+#include <opencv2/tracking.hpp>
 
 #include <chrono>
 #include <mutex>
@@ -38,7 +39,9 @@ public:
 
     ~Chase2D() { stop(); };
 
-    void start(const Eigen::Vector3f& speed_presets, bool show_live = false);
+    void start(const std::vector<float>& speeds);
+
+    void update();
 
     void stop();
 
@@ -67,22 +70,27 @@ private:
     eg::Matrix3f intrinsics;
     eg::Matrix4f extrinsics;
 
+#ifdef WITH_DRONE
     std::shared_ptr<mav::Action>    action;
     std::shared_ptr<mav::Offboard>  offboard;
     std::shared_ptr<mav::Telemetry> telemetry;
+#endif
 
-    cv::Mat                     frame;
-    Timestamp                   frame_timestamp;
+    cv::Mat   frame;
+    Timestamp frame_timestamp;
+#ifdef WITH_DRONE
     mav::Telemetry::PositionNED frame_position = {};
     mav::Telemetry::EulerAngle  frame_attitude = {};
+#endif
 
     Timestamp tracked_timestamp;
 
-    void recording_routine(bool show_live);
-    void tracking_routine(bool show_live);
-    void chasing_routine(float v_speed, float h_speed, float y_speed);
+    void recording_routine();
+    void tracking_routine();
+    void chasing_routine(float f_speed, float v_speed, float y_speed);
 
-    static eg::Vector2f visual_detection(const cv::Mat& im);
+    cv::Rect2d                tracker_roi;
+    cv::Ptr<cv::TrackerMOSSE> tracker = cv::TrackerMOSSE::create();
 
     eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i);
     eg::Vector3f invert_world_transform(const eg::Vector3f& position_c);
@@ -91,8 +99,10 @@ private:
 
     static eg::Matrix3f euler_angle_to_rotation_matrix(mav::Telemetry::EulerAngle ea);
 
+#ifdef WITH_DRONE
     inline auto current_position() { return this->telemetry->position_velocity_ned().position; };
     inline auto current_attitude() { return this->telemetry->attitude_euler_angle(); }
+#endif
 
     inline static void check_action_result(mav::Action::Result result)
     {

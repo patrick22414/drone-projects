@@ -42,6 +42,7 @@ Chase2D::Chase2D(const std::string& connection, const std::string& video_input) 
 
 Chase2D::Chase2D(const std::string& connection)
 {
+#ifdef WITH_DRONE
     // Private constructor to init MAVSDK connection
     mav::Mavsdk mavsdk;
 
@@ -72,21 +73,40 @@ Chase2D::Chase2D(const std::string& connection)
     log_green("Vehicle is Armed");
 
     log_green("Connection complete");
+#else
+    log_yellow("Connection not available");
+#endif
 }
 
-void Chase2D::start(const Eigen::Vector3f& speed_presets, bool show_live)
+void Chase2D::start(const std::vector<float>& speeds)
 {
+    while (true) {
+        if (!capture.read(frame))
+            log_red_and_exit("Cannot read frame or end of video");
+
+        cv::flip(frame, frame, -1);
+        cv::imshow("Press Space to select ROI", frame);
+
+        if (cv::waitKey(1) == ' ') {
+            cv::destroyAllWindows();
+            tracker_roi = cv::selectROI("Press Space to confirm ROI", frame);
+            break;
+        }
+    }
+
+    cv::destroyAllWindows();
+
     is_recording     = true;
-    recording_thread = std::thread(&Chase2D::recording_routine, this, show_live);
+    recording_thread = std::thread(&Chase2D::recording_routine, this);
 
     is_tracking     = true;
-    tracking_thread = std::thread(&Chase2D::tracking_routine, this, show_live);
+    tracking_thread = std::thread(&Chase2D::tracking_routine, this);
 
     is_chasing     = true;
-    chasing_thread = std::thread(&Chase2D::chasing_routine, this, speed_presets[0], speed_presets[1], speed_presets[2]);
+    chasing_thread = std::thread(&Chase2D::chasing_routine, this, speeds[0], speeds[1], speeds[2]);
 }
 
-void Chase2D::recording_routine(bool show_live)
+void Chase2D::recording_routine()
 {
     // Recording routine records the raw camera frame to `frame`, and optionally displays a live feed of the raw frame.
     log("Start recording routine");
@@ -97,8 +117,10 @@ void Chase2D::recording_routine(bool show_live)
         mutex.lock(); // CRITICAL SECTION
 
         frame_timestamp = Clock::now();
-        frame_position  = current_position();
-        frame_attitude  = current_attitude();
+#ifdef WITH_DRONE
+        frame_position = current_position();
+        frame_attitude = current_attitude();
+#endif
 
         if (!capture.read(frame))
             log_red_and_exit("Cannot read frame or end of video");
@@ -109,37 +131,40 @@ void Chase2D::recording_routine(bool show_live)
 
         if (has_writer)
             writer.write(frame);
-
-        if (show_live) {
-            cv::imshow("Chase2D Recording Live", frame);
-            cv::waitKey(1);
-        }
     }
 
     log("End recording routine");
 }
 
-void Chase2D::tracking_routine(bool show_live)
+void Chase2D::tracking_routine()
 {
     // Tracking routine processes the raw image from `frame`, finds the target in each coordinate system, in turn
     // populates `positions_i`, `positions_c`, and `positions_w`, and optionally displays a live feed of the processed
     // image
     log("Start tracking routine");
 
-    cv::Mat im;
+    tracker->init(frame, tracker_roi);
 
+    cv::Mat im;
     while (is_tracking) {
         if (frame_timestamp > tracked_timestamp) {
             mutex.lock(); // CRITICAL SECTION
 
             tracked_timestamp = frame_timestamp;
-            extrinsics        = build_extrinsics(frame_position, frame_attitude);
             frame.copyTo(im);
+
+#ifdef WITH_DRONE
+            extrinsics = build_extrinsics(frame_position, frame_attitude);
+#endif
 
             mutex.unlock(); // END CRITICAL SECTION
 
+            tracker->update(im, tracker_roi);
+            std::cout << "Tracker ROI: " << tracker_roi << std::endl;
+
             // Locate target in Image and put into positions_i
-            auto position_i = visual_detection(im);
+            eg::Vector2f position_i(tracker_roi.x + tracker_roi.width / 2, tracker_roi.y + tracker_roi.height / 2);
+
 
             // Transform target to Camera and put into positions_c (fake homogeneous coordinates)
             // auto position_c = invert_camera_transform(position_i);
@@ -154,54 +179,68 @@ void Chase2D::tracking_routine(bool show_live)
             // positions_w.push_back(position_w);
 
             mutex.unlock(); // END CRITICAL SECTION
+
+            cv::rectangle(im, tracker_roi, {255, 0, 0});
+            cv::drawMarker(im, {static_cast<int>(position_i[0]), static_cast<int>(position_i[1])}, {0, 255, 255});
         }
+
+        cv::imshow("Tracking", im);
+        cv::waitKey(1);
     }
+
+    cv::destroyAllWindows();
 
     log("End tracking routine");
 }
 
-void Chase2D::chasing_routine(float v_speed, float h_speed, float y_speed)
+void Chase2D::chasing_routine(float f_speed, float v_speed, float y_speed)
 {
     // Chasing routine takes the last known position of the target (`positions_w[-1]`) and current telemetry status of
     // the drone, determines the next velocity and gives it to the drone.
     log("Start chasing routine");
 
+#ifdef WITH_DRONE
     // Must set one offboard command before start offboard
     offboard->set_velocity_body({0, 0, 0, 0});
     auto start_result = offboard->start();
     check_offboard_result(start_result);
+#endif
 
     while (is_chasing) {
+        sleep_for(milliseconds(1000));
+
+        if (positions_i.empty())
+            continue;
+
         mutex.lock(); // CRITICAL SECTION
 
         auto target_last_known_position = positions_i[positions_i.size() - 1];
 
         mutex.unlock(); // END CRITICAL SECTION
 
-        float xc = target_last_known_position[0] - (resolution[0] - 1.0f) / 2.0f;
-        float yc = target_last_known_position[1] - (resolution[1] - 1.0f) / 2.0f;
+        float xc = target_last_known_position[0] - resolution[0] / 2.0f;
+        float yc = target_last_known_position[1] - resolution[1] / 2.0f;
 
-        float threshold = resolution[1] / 10.0f;
+        float safe_area = resolution[1] / 10.0f;
 
-        float chase_forward = h_speed;
-        float chase_down    = abs(yc) < threshold ? 0 : (yc > 0 ? v_speed : -v_speed);
-        float chase_yaw     = abs(xc) < threshold ? 0 : (xc > 0 ? y_speed : -y_speed);
+        float chase_forward = f_speed;
+        float chase_down    = abs(yc) < safe_area ? 0 : (yc > 0 ? v_speed : -v_speed);
+        float chase_yaw     = abs(xc) < safe_area ? 0 : (xc > 0 ? y_speed : -y_speed);
 
+        std::cout << "[Chase2D] Chasing at: FORWARD: " << v_speed << "m/s " << (chase_down > 0 ? "DOWN: " : "UP  : ")
+                  << f_speed << "m/s " << (chase_yaw > 0 ? "RIGHT: " : "LEFT : ") << y_speed << "deg/s" << std::endl;
+
+#ifdef WITH_DRONE
         offboard->set_velocity_body({chase_forward, 0, chase_down, chase_yaw});
-
-        sleep_for(milliseconds(10));
+#endif
     }
 
+#ifdef WITH_DRONE
     auto stop_result = offboard->stop();
     check_offboard_result(stop_result);
+#endif
 
     log("End chasing routine");
-}
-
-eg::Vector2f Chase2D::visual_detection(const cv::Mat& im)
-{
-    // TODO
-    return Eigen::Vector2f();
 }
 
 eg::Vector3f Chase2D::invert_camera_transform(const eg::Vector2f& position_i)
