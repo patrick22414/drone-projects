@@ -1,14 +1,10 @@
 #include "cxxopts.hpp"
 #include "Chase2D.h"
 
-#include <X11/Xlib.h>
-
 int main(int argc, char* argv[])
 {
     const CameraProfile pi_camera_v1(0, 3.60, {3.67, 2.74});
     const CameraProfile pi_camera_v2(0, 3.04, {3.674, 2.760});
-
-    XInitThreads();
 
     cxxopts::Options options("chase", "Project Chase");
 
@@ -21,9 +17,9 @@ int main(int argc, char* argv[])
         ("s,speeds","Forward, vertical, and yaw chasing speed (m/s, m/s, deg/s)",
             cxxopts::value<std::vector<float>>()->default_value("2,1,15"))
         ("i,input", "Input video file",
-             cxxopts::value<std::string>())
+             cxxopts::value<std::string>()->default_value(""))
         ("o,output", "Output video file",
-             cxxopts::value<std::string>());
+             cxxopts::value<std::string>()->default_value("")->implicit_value("chase-v1.mp4"));
     // clang-format on
 
     options.parse_positional({"connection"});
@@ -36,24 +32,44 @@ int main(int argc, char* argv[])
     }
 
     auto arg_speeds     = args["speeds"].as<std::vector<float>>();
+    auto arg_input      = args["input"].as<std::string>();
+    auto arg_output     = args["output"].as<std::string>();
     auto arg_connection = args["connection"].as<std::string>();
 
-    std::cout << "Command-line arguments:" << std::endl;
-    std::cout << "  forward speed  : " << arg_speeds[0] << " m/s" << std::endl;
-    std::cout << "  vertical speed : " << arg_speeds[1] << " m/s" << std::endl;
-    std::cout << "  yaw speed      : " << arg_speeds[2] << " deg/s" << std::endl;
-    std::cout << "  connection     : " << arg_connection << std::endl;
+    std::cout << "Command-line arguments:" << std::endl
+              << "  forward speed  : " << arg_speeds[0] << " m/s" << std::endl
+              << "  vertical speed : " << arg_speeds[1] << " m/s" << std::endl
+              << "  yaw speed      : " << arg_speeds[2] << " deg/s" << std::endl
+              << "  input file     : " << arg_input << std::endl
+              << "  output file    : " << arg_output << std::endl
+              << "  connection     : " << arg_connection << std::endl;
 
-    Chase2D chase(arg_connection, pi_camera_v2);
+    std::shared_ptr<Chase2D> chase;
 
-    chase.start(arg_speeds);
+    if (arg_input.empty())
+        chase = std::make_shared<Chase2D>(arg_connection, pi_camera_v2, arg_speeds, arg_output);
+    else
+        chase = std::make_shared<Chase2D>(arg_connection, arg_input, arg_speeds, arg_output);
+
+    chase->start();
 
     while (true) {
-        if (cv::waitKey(1) == 27)
+        chase->update();
+
+        auto key = cv::waitKey(1);
+        if (key == ' ') {
+            key = cv::waitKey(-1);
+            if (key == ' ')
+                continue;
+            else if (key == '\x1b')
+                break;
+        } else if (key == '\x1b')
             break;
+
+        sleep_for(milliseconds(50));
     }
 
-    chase.stop();
+    chase->stop();
 
     return 0;
 }

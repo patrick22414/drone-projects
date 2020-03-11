@@ -29,6 +29,4 @@ target_link_libraries(chase
         MAVSDK::mavsdk_offboard
         MAVSDK::mavsdk_telemetry
         ${OpenCV_LIBS}
-        pthread
-        stdc++fs
-        X11)
+        pthread)

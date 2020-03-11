@@ -33,13 +33,19 @@ public:
     typedef std::chrono::steady_clock             Clock;
     typedef std::chrono::steady_clock::time_point Timestamp;
 
-    Chase2D(const std::string& connection, const CameraProfile& camera, const std::string& video_output = "");
+    Chase2D(
+        const std::string&        connection,
+        const CameraProfile&      camera,
+        const std::vector<float>& speeds,
+        const std::string&        video_output = "");
 
-    Chase2D(const std::string& connection, const std::string& video_input);
+    Chase2D(
+        const std::string&        connection,
+        const std::string&        video_input,
+        const std::vector<float>& speeds,
+        const std::string&        video_output = "");
 
-    ~Chase2D() { stop(); };
-
-    void start(const std::vector<float>& speeds);
+    void start();
 
     void update();
 
@@ -48,60 +54,26 @@ public:
 private:
     explicit Chase2D(const std::string& connection);
 
-    bool is_recording = false;
-    bool is_tracking  = false;
-    bool is_chasing   = false;
-
-    std::mutex mutex;
-
-    std::thread recording_thread;
-    std::thread tracking_thread;
-    std::thread chasing_thread;
-
-    std::vector<eg::Vector2f> positions_i; // target positions in Image frame
-    std::vector<eg::Vector3f> positions_c; // target positions in Camera frame, `z` is always 1 since depth is unknown
-    std::vector<eg::Vector3f> positions_w; // target positions in World frame, using NED coordinates
+    float f_speed = 0;
+    float v_speed = 0;
+    float y_speed = 0;
 
     cv::VideoCapture capture;
     cv::VideoWriter  writer;
 
+    double video_fps = -1;
+
     eg::Vector2i resolution;
 
-    eg::Matrix3f intrinsics;
-    eg::Matrix4f extrinsics;
+    cv::Mat frame;
+
+    cv::Rect2d                tracker_roi;
+    cv::Ptr<cv::TrackerMOSSE> tracker = cv::TrackerMOSSE::create();
 
 #ifdef WITH_DRONE
     std::shared_ptr<mav::Action>    action;
     std::shared_ptr<mav::Offboard>  offboard;
     std::shared_ptr<mav::Telemetry> telemetry;
-#endif
-
-    cv::Mat   frame;
-    Timestamp frame_timestamp;
-#ifdef WITH_DRONE
-    mav::Telemetry::PositionNED frame_position = {};
-    mav::Telemetry::EulerAngle  frame_attitude = {};
-#endif
-
-    Timestamp tracked_timestamp;
-
-    void recording_routine();
-    void tracking_routine();
-    void chasing_routine(float f_speed, float v_speed, float y_speed);
-
-    cv::Rect2d                tracker_roi;
-    cv::Ptr<cv::TrackerMOSSE> tracker = cv::TrackerMOSSE::create();
-
-    eg::Vector3f invert_camera_transform(const eg::Vector2f& position_i);
-    eg::Vector3f invert_world_transform(const eg::Vector3f& position_c);
-
-    static eg::Matrix4f build_extrinsics(mav::Telemetry::PositionNED translation, mav::Telemetry::EulerAngle rotation);
-
-    static eg::Matrix3f euler_angle_to_rotation_matrix(mav::Telemetry::EulerAngle ea);
-
-#ifdef WITH_DRONE
-    inline auto current_position() { return this->telemetry->position_velocity_ned().position; };
-    inline auto current_attitude() { return this->telemetry->attitude_euler_angle(); }
 #endif
 
     inline static void check_action_result(mav::Action::Result result)
@@ -126,17 +98,17 @@ private:
 
     inline static void log_green(const std::string& message)
     {
-        std::cout << CLI_COLOR_GREEN << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
+        std::cout << CLI_COLOR_GREEN << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
     }
 
     inline static void log_yellow(const std::string& message)
     {
-        std::cout << CLI_COLOR_YELLOW << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
+        std::cout << CLI_COLOR_YELLOW << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
     }
 
     inline static void log_red_and_exit(const std::string& message)
     {
-        std::cout << CLI_COLOR_RED << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
+        std::cout << CLI_COLOR_RED << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
         exit(EXIT_FAILURE);
     }
 };
