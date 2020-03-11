@@ -223,5 +223,14 @@ void Chase2D::stop()
     }
 #endif
 
+    release();
     log_green("Stopped");
+}
+
+void Chase2D::release()
+{
+    frame.release();
+    tracker.release();
+    capture.release();
+    writer.release();
 }

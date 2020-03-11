@@ -29,11 +29,7 @@ using std::chrono::seconds;
 using std::this_thread::sleep_for;
 
 class Chase2D {
-    // TODO
 public:
-    typedef std::chrono::steady_clock             Clock;
-    typedef std::chrono::steady_clock::time_point Timestamp;
-
     Chase2D(
         const std::string&        connection,
         const CameraProfile&      camera,
@@ -45,6 +41,8 @@ public:
         const std::string&        video_input,
         const std::vector<float>& speeds,
         const std::string&        video_output = "");
+
+    ~Chase2D() { release(); }
 
     void start();
 
@@ -77,19 +75,21 @@ private:
     std::shared_ptr<mav::Telemetry> telemetry;
 #endif
 
-    inline static void check_action_result(mav::Action::Result result)
+    void release();
+
+    inline void check_action_result(mav::Action::Result result)
     {
         if (result != mav::Action::Result::SUCCESS)
             log_red_and_exit(mav::Action::result_str(result));
     }
 
-    inline static void check_offboard_result(mav::Offboard::Result result)
+    inline void check_offboard_result(mav::Offboard::Result result)
     {
         if (result != mav::Offboard::Result::SUCCESS)
             log_red_and_exit(mav::Offboard::result_str(result));
     }
 
-    inline static void check_connection_result(mav::ConnectionResult result)
+    inline void check_connection_result(mav::ConnectionResult result)
     {
         if (result != mav::ConnectionResult::SUCCESS)
             log_red_and_exit(mav::connection_result_str(result));
@@ -107,9 +107,12 @@ private:
         std::cout << CLI_COLOR_YELLOW << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
     }
 
-    inline static void log_red_and_exit(const std::string& message)
+    inline void log_red_and_exit(const std::string& message)
     {
         std::cout << CLI_COLOR_RED << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
+
+        release();
+
         exit(EXIT_FAILURE);
     }
 };
