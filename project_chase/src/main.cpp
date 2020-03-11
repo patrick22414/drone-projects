@@ -1,5 +1,26 @@
-#include "cxxopts.hpp"
-#include "Chase2D.h"
+#include "chase2d.h"
+
+#include <cxxopts.hpp>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+std::string generate_video_filename(const std::string& prefix = "chase")
+{
+    fs::path    folder = fs::path(getenv("HOME")) / "Videos";
+    std::string filename;
+    for (int i = 1;; ++i) {
+        filename = fmt::format(FMT_STRING("{}/{}-v{}.mp4"), folder.string(), prefix, i);
+
+        if (!fs::exists(filename)) {
+            break;
+        }
+    }
+
+    std::cout << "Generated video filename: " << filename << std::endl;
+
+    return filename;
+}
 
 int main(int argc, char* argv[])
 {
@@ -19,7 +40,7 @@ int main(int argc, char* argv[])
         ("i,input", "Input video file",
              cxxopts::value<std::string>()->default_value(""))
         ("o,output", "Output video file",
-             cxxopts::value<std::string>()->default_value("")->implicit_value("chase-v1.mp4"));
+             cxxopts::value<std::string>()->default_value("")->implicit_value(generate_video_filename()));
     // clang-format on
 
     options.parse_positional({"connection"});

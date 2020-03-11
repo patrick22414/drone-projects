@@ -1,4 +1,4 @@
-#include "Chase2D.h"
+#include "chase2d.h"
 
 Chase2D::Chase2D(
     const std::string&        connection,
@@ -170,7 +170,12 @@ void Chase2D::update()
     // Tracking section
     tracker->update(frame, tracker_roi);
 
-    std::cout << "[Chase2D] Tracker ROI at: " << tracker_roi << std::endl;
+    log(fmt::format(
+        FMT_STRING("Tracker ROI: [{:.0f}x{:.0f} from {:.0f},{:.0f}]"),
+        tracker_roi.width,
+        tracker_roi.height,
+        tracker_roi.x,
+        tracker_roi.y));
 
     cv::rectangle(frame, tracker_roi, {255, 0, 0}, 2);
     cv::imshow("Tracking", frame);
@@ -190,10 +195,11 @@ void Chase2D::update()
     float chase_down    = abs(yc) < safe_area ? 0 : (yc > 0 ? v_speed : -v_speed);
     float chase_yaw     = abs(xc) < safe_area ? 0 : (xc > 0 ? y_speed : -y_speed);
 
-    std::cout << "[Chase2D] Chasing at:"
-              << "FORWARD: " << chase_forward << "m/s "
-              << "DOWN: " << chase_down << "m/s "
-              << "RIGHT: " << chase_yaw << "deg/s" << std::endl;
+    log_green(fmt::format(
+        FMT_STRING("Chasing: FORWARD: {: .1f} m/s, DOWN: {: .1f} m/s, RIGHT: {: .1f} deg/s"),
+        chase_forward,
+        chase_down,
+        chase_yaw));
 
 #ifdef WITH_DRONE
     offboard->set_velocity_body({chase_forward, 0, chase_down, chase_yaw});

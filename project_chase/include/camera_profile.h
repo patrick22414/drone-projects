@@ -1,5 +1,5 @@
-#ifndef PROJECT_CHASE_CAMERAPROFILE_H
-#define PROJECT_CHASE_CAMERAPROFILE_H
+#ifndef PROJECT_CHASE_CAMERA_PROFILE_H
+#define PROJECT_CHASE_CAMERA_PROFILE_H
 
 #include <Eigen/Dense>
 
@@ -23,4 +23,4 @@ public:
     eg::Matrix3f intrinsics;
 };
 
-#endif // PROJECT_CHASE_CAMERAPROFILE_H
+#endif // PROJECT_CHASE_CAMERA_PROFILE_H

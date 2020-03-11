@@ -6,9 +6,10 @@
 #define CLI_COLOR_YELLOW "\033[33m" // Turn text on console red
 #define CLI_COLOR_NORMAL "\033[0m"  // Restore normal console colour
 
-#include "CameraProfile.h"
+#include "camera_profile.h"
 
 #include <Eigen/Dense>
+#include <fmt/format.h>
 #include <mavsdk/mavsdk.h>
 #include <mavsdk/plugins/action/action.h>
 #include <mavsdk/plugins/offboard/offboard.h>
@@ -98,17 +99,17 @@ private:
 
     inline static void log_green(const std::string& message)
     {
-        std::cout << CLI_COLOR_GREEN << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
+        std::cout << CLI_COLOR_GREEN << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
     }
 
     inline static void log_yellow(const std::string& message)
     {
-        std::cout << CLI_COLOR_YELLOW << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
+        std::cout << CLI_COLOR_YELLOW << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
     }
 
     inline static void log_red_and_exit(const std::string& message)
     {
-        std::cout << CLI_COLOR_RED << "[Chase2D] " << CLI_COLOR_NORMAL << message << std::endl;
+        std::cout << CLI_COLOR_RED << "[Chase2D] " << message << CLI_COLOR_NORMAL << std::endl;
         exit(EXIT_FAILURE);
     }
 };
