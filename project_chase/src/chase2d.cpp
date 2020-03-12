@@ -1,13 +1,13 @@
 #include "chase2d.h"
 
 Chase2D::Chase2D(
+    int                       camera_index,
     const std::string&        connection,
-    const CameraProfile&      camera,
     const std::vector<float>& speeds,
     const std::string&        video_output) :
     Chase2D(connection)
 {
-    capture = cv::VideoCapture(camera.index, cv::CAP_V4L);
+    capture = cv::VideoCapture(camera_index);
 
     if (!capture.isOpened())
         log_red_and_exit("Cannot open camera");
@@ -38,8 +38,8 @@ Chase2D::Chase2D(
 }
 
 Chase2D::Chase2D(
-    const std::string&        connection,
     const std::string&        video_input,
+    const std::string&        connection,
     const std::vector<float>& speeds,
     const std::string&        video_output) :
     Chase2D(connection)

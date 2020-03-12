@@ -6,8 +6,6 @@
 #define CLI_COLOR_YELLOW "\033[33m" // Turn text on console red
 #define CLI_COLOR_NORMAL "\033[0m"  // Restore normal console colour
 
-#include "camera_profile.h"
-
 #include <Eigen/Dense>
 #include <fmt/format.h>
 #include <mavsdk/mavsdk.h>
@@ -31,16 +29,16 @@ using std::this_thread::sleep_for;
 class Chase2D {
 public:
     Chase2D(
+        int                       camera_index,
         const std::string&        connection,
-        const CameraProfile&      camera,
         const std::vector<float>& speeds,
-        const std::string&        video_output = "");
+        const std::string&        video_output);
 
     Chase2D(
-        const std::string&        connection,
         const std::string&        video_input,
+        const std::string&        connection,
         const std::vector<float>& speeds,
-        const std::string&        video_output = "");
+        const std::string&        video_output);
 
     ~Chase2D() { release(); }
 

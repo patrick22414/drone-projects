@@ -24,9 +24,6 @@ std::string generate_video_filename(const std::string& prefix = "chase")
 
 int main(int argc, char* argv[])
 {
-    const CameraProfile pi_camera_v1(0, 3.60, {3.67, 2.74});
-    const CameraProfile pi_camera_v2(0, 3.04, {3.674, 2.760});
-
     cxxopts::Options options("chase", "Project Chase");
 
     // clang-format off
@@ -37,6 +34,8 @@ int main(int argc, char* argv[])
             cxxopts::value<bool>())
         ("s,speeds","Forward, vertical, and yaw chasing speed (m/s, m/s, deg/s)",
             cxxopts::value<std::vector<float>>()->default_value("2,1,15"))
+        ("m,camera", "Camera index",
+            cxxopts::value<int>()->default_value("0"))
         ("i,input", "Input video file",
              cxxopts::value<std::string>()->default_value(""))
         ("o,output", "Output video file",
@@ -53,6 +52,7 @@ int main(int argc, char* argv[])
     }
 
     auto arg_speeds     = args["speeds"].as<std::vector<float>>();
+    auto arg_camera     = args["camera"].as<int>();
     auto arg_input      = args["input"].as<std::string>();
     auto arg_output     = args["output"].as<std::string>();
     auto arg_connection = args["connection"].as<std::string>();
@@ -61,6 +61,7 @@ int main(int argc, char* argv[])
               << "  forward speed  : " << arg_speeds[0] << " m/s" << std::endl
               << "  vertical speed : " << arg_speeds[1] << " m/s" << std::endl
               << "  yaw speed      : " << arg_speeds[2] << " deg/s" << std::endl
+              << "  camera index   : " << arg_camera << std::endl
               << "  input file     : " << arg_input << std::endl
               << "  output file    : " << arg_output << std::endl
               << "  connection     : " << arg_connection << std::endl;
@@ -68,9 +69,9 @@ int main(int argc, char* argv[])
     std::shared_ptr<Chase2D> chase;
 
     if (arg_input.empty())
-        chase = std::make_shared<Chase2D>(arg_connection, pi_camera_v2, arg_speeds, arg_output);
+        chase = std::make_shared<Chase2D>(arg_camera, arg_connection, arg_speeds, arg_output);
     else
-        chase = std::make_shared<Chase2D>(arg_connection, arg_input, arg_speeds, arg_output);
+        chase = std::make_shared<Chase2D>(arg_input, arg_connection, arg_speeds, arg_output);
 
     chase->start();
 
