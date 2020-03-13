@@ -10,5 +10,10 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 add_executable(cv_recording cv_recording.cpp)
 
 target_link_libraries(cv_recording
-        stdc++fs
         ${OpenCV_LIBS})
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message("Add extra link libraries for ${CMAKE_CXX_COMPILER_ID}")
+    target_link_libraries(chase
+            stdc++fs)
+endif ()

@@ -8,28 +8,33 @@ namespace fs = std::filesystem;
 
 std::string generate_video_filename(const std::string& prefix = "test-recording")
 {
-    fs::path full_filename = fs::path(std::getenv("HOME")) / "Videos";
+    fs::path folder = fs::path(std::getenv("HOME")) / "Videos";
+
+    if (!fs::exists(folder))
+        folder = fs::path(std::getenv("HOME")) / "Movies"; // for macOS
+
+    if (!fs::exists(folder))
+        folder = fs::path(std::getenv("HOME"));
+
     std::stringstream filename;
     for (int i = 1;; ++i) {
-        filename.str("");
-        filename << prefix << "-v" << i << ".avi";
+        filename.str(""); // clear stringstream
+        filename << prefix << "-v" << i << ".mp4";
 
-        if (!fs::exists(fs::path(full_filename) / filename.str())) {
+        if (!fs::exists(folder / filename.str())) {
             break;
         }
     }
 
-    std::cout << "Using video filename " << fs::path(full_filename) / filename.str() << std::endl;
+    std::cout << "Using video filename " << folder / filename.str() << std::endl;
 
-    return fs::path(full_filename) / filename.str();
+    return folder / filename.str();
 }
 
 int main(int argc, char* argv[])
 {
     // use default camera as video source
-    VideoCapture capture(0, CAP_V4L);
-    capture.set(CAP_PROP_FRAME_WIDTH, 1640);
-    capture.set(CAP_PROP_FRAME_HEIGHT, 1232);
+    VideoCapture capture(0);
 
     // check if we succeeded
     if (!capture.isOpened()) {
@@ -50,8 +55,8 @@ int main(int argc, char* argv[])
 
     //--- INITIALIZE VIDEOWRITER
     VideoWriter writer;
-    auto codec    = VideoWriter::fourcc('M', 'J', 'P', 'G');
-    auto fps      = 25.0;
+    auto codec    = VideoWriter::fourcc('m', 'p', '4', 'v');
+    auto fps      = 30.0;
     auto filename = argc > 1 ? generate_video_filename(argv[1]) : generate_video_filename();
 
     writer.open(filename, codec, fps, frame.size(), isColor);
