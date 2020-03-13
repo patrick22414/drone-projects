@@ -14,6 +14,6 @@ target_link_libraries(cv_recording
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message("Add extra link libraries for ${CMAKE_CXX_COMPILER_ID}")
-    target_link_libraries(chase
+    target_link_libraries(cv_recording
             stdc++fs)
 endif ()
