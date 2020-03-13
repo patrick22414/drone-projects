@@ -174,42 +174,47 @@ void Chase2D::update()
     cv::flip(frame, frame, -1);
 
     // Tracking section
-    tracker->update(frame, tracker_roi);
+    bool target_acquired = tracker->update(frame, tracker_roi);
 
-    log(fmt::format(
-        FMT_STRING("Tracker ROI: [{:.0f}x{:.0f} from {:.0f},{:.0f}]"),
-        tracker_roi.width,
-        tracker_roi.height,
-        tracker_roi.x,
-        tracker_roi.y));
+    if (target_acquired) {
+        cv::rectangle(frame, tracker_roi, {255, 0, 0}, 2);
+        log(fmt::format(
+            FMT_STRING("Tracker ROI: [{:.0f}x{:.0f} from {:.0f},{:.0f}]"),
+            tracker_roi.width,
+            tracker_roi.height,
+            tracker_roi.x,
+            tracker_roi.y));
 
-    cv::rectangle(frame, tracker_roi, {255, 0, 0}, 2);
-    cv::imshow("Tracking", frame);
+        if (writer.isOpened())
+            writer.write(frame);
 
-    if (writer.isOpened())
-        writer.write(frame);
+        eg::Vector2f position_i(tracker_roi.x + tracker_roi.width / 2, tracker_roi.y + tracker_roi.height / 2);
 
-    eg::Vector2f position_i(tracker_roi.x + tracker_roi.width / 2, tracker_roi.y + tracker_roi.height / 2);
+        // Chasing section
+        float xc = position_i[0] - resolution[0] / 2.0f;
+        float yc = position_i[1] - resolution[1] / 2.0f;
 
-    // Chasing section
-    float xc = position_i[0] - resolution[0] / 2.0f;
-    float yc = position_i[1] - resolution[1] / 2.0f;
+        float safe_area = resolution[1] / 10.0f;
 
-    float safe_area = resolution[1] / 10.0f;
+        float chase_forward = f_speed;
+        float chase_down    = abs(yc) < safe_area ? 0 : (yc > 0 ? v_speed : -v_speed);
+        float chase_yaw     = abs(xc) < safe_area ? 0 : (xc > 0 ? y_speed : -y_speed);
 
-    float chase_forward = f_speed;
-    float chase_down    = abs(yc) < safe_area ? 0 : (yc > 0 ? v_speed : -v_speed);
-    float chase_yaw     = abs(xc) < safe_area ? 0 : (xc > 0 ? y_speed : -y_speed);
-
-    log_green(fmt::format(
-        FMT_STRING("Chasing: FORWARD: {: .1f} m/s, DOWN: {: .1f} m/s, RIGHT: {: .1f} deg/s"),
-        chase_forward,
-        chase_down,
-        chase_yaw));
+        log_green(fmt::format(
+            FMT_STRING("Chasing: FORWARD: {: .1f} m/s, DOWN: {: .1f} m/s, RIGHT: {: .1f} deg/s"),
+            chase_forward,
+            chase_down,
+            chase_yaw));
 
 #ifdef WITH_DRONE
-    offboard->set_velocity_body({chase_forward, 0, chase_down, chase_yaw});
+        offboard->set_velocity_body({chase_forward, 0, chase_down, chase_yaw});
 #endif
+    } else {
+        cv::rectangle(frame, tracker_roi, {0, 255, 255}, 2);
+        log_yellow("Tracker target lost");
+    }
+
+    cv::imshow("Tracking", frame);
 }
 
 void Chase2D::stop()
