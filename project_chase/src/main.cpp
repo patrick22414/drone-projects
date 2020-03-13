@@ -12,9 +12,6 @@ std::string generate_video_filename(const std::string& prefix = "chase")
     if (!fs::exists(folder))
         folder = fs::path(std::getenv("HOME")) / "Movies"; // for macOS
 
-    if (!fs::exists(folder))
-        folder = fs::path(std::getenv("HOME"));
-
     std::string filename;
     for (int i = 1;; ++i) {
         filename = fmt::format(FMT_STRING("{}/{}-v{}.mp4"), folder.string(), prefix, i);
@@ -46,7 +43,7 @@ int main(int argc, char* argv[])
         ("i,input", "Input video file",
              cxxopts::value<std::string>()->default_value(""))
         ("o,output", "Output video file",
-             cxxopts::value<std::string>()->default_value(""));
+             cxxopts::value<std::string>()->default_value("")->implicit_value(generate_video_filename()));
     // clang-format on
 
     options.parse_positional({"connection"});
@@ -63,9 +60,6 @@ int main(int argc, char* argv[])
     auto arg_input      = args["input"].as<std::string>();
     auto arg_output     = args["output"].as<std::string>();
     auto arg_connection = args["connection"].as<std::string>();
-
-    if (arg_output.empty())
-        arg_output = generate_video_filename();
 
     std::cout << "Command-line arguments:" << std::endl
               << "  forward speed  : " << arg_speeds[0] << " m/s" << std::endl

@@ -7,7 +7,11 @@ Chase2D::Chase2D(
     const std::string&        video_output) :
     Chase2D(connection)
 {
-    capture = cv::VideoCapture(camera_index);
+#ifdef __linux__
+    capture.open(camera_index, cv::CAP_V4L);
+#else // macOS or Win
+    capture.open(camera_index);
+#endif
 
     if (!capture.isOpened())
         log_red_and_exit("Cannot open camera");
@@ -26,8 +30,7 @@ Chase2D::Chase2D(
         if (!writer.isOpened())
             log_red_and_exit("Cannot open video output to write");
 
-        log_green("Video writer opened");
-        log_green(video_output);
+        log_green(fmt::format(FMT_STRING("Video writer opened at {}"), video_output));
     }
 
     f_speed = speeds[0];
@@ -44,7 +47,11 @@ Chase2D::Chase2D(
     const std::string&        video_output) :
     Chase2D(connection)
 {
-    capture = cv::VideoCapture(video_input);
+#ifdef __linux__
+    capture.open(video_input, cv::CAP_V4L);
+#else // macOS or Win
+    capture.open(video_input);
+#endif
 
     if (!capture.isOpened())
         log_red_and_exit("Cannot open video input");
@@ -65,8 +72,7 @@ Chase2D::Chase2D(
         if (!writer.isOpened())
             log_red_and_exit("Cannot open video output to write");
 
-        log_green("Video writer opened");
-        log_green(video_output);
+        log_green(fmt::format(FMT_STRING("Video writer opened at {}"), video_output));
     }
 
     f_speed = speeds[0];
