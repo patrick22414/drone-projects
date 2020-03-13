@@ -25,7 +25,7 @@ Chase2D::Chase2D(
         auto codec = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
         auto fps   = 30.0;
 
-        writer = cv::VideoWriter(video_output, codec, fps, frame.size());
+        writer.open(video_output, codec, fps, frame.size());
 
         if (!writer.isOpened())
             log_red_and_exit("Cannot open video output to write");
@@ -67,7 +67,7 @@ Chase2D::Chase2D(
         auto codec = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
         auto fps   = video_fps;
 
-        writer = cv::VideoWriter(video_output, codec, fps, frame.size());
+        writer.open(video_output, codec, fps, frame.size());
 
         if (!writer.isOpened())
             log_red_and_exit("Cannot open video output to write");
